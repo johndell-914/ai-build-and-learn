@@ -24,10 +24,12 @@ async def main():
             mcp_servers=[server],
         )
 
-        # Test all three tool types
         result = await Runner.run(
             agent,
-            "What is 12 + 30? What is 6 * 7? Also, please greet Sage.",
+            "What is 12 + 30? What is 6 * 7? "
+            "Greet Sage. "
+            "What's the weather in Seattle? "
+            "Search DuckDuckGo for 'FastMCP Python' and summarize the top result.",
         )
 
         print(result.final_output)

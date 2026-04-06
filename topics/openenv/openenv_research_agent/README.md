@@ -11,9 +11,9 @@ The demo proves a core point: **traditional RL reward functions fail for languag
 [OpenEnv](https://github.com/meta-pytorch/OpenEnv) is a unified framework for building, deploying, and interacting with isolated execution environments for agentic reinforcement learning. Unlike OpenAI Gym (local, in-process, discrete), OpenEnv is:
 
 - **HTTP/WebSocket-based** — environments run as microservices, not in-process
-- **Docker-isolated** — each episode gets its own container
+- **Docker-isolated** — environments run inside containers; agents connect via `GenericEnvClient`
 - **LLM-native** — built-in `AnthropicClient`, `MCPClient`, tool discovery
-- **Concurrent** — multiple agents can run in the same environment simultaneously
+- **Concurrent** — one container can host multiple independent sessions simultaneously
 - **Minimal API** — just `reset()`, `step()`, `state`
 
 ---
@@ -31,17 +31,27 @@ The demo proves a core point: **traditional RL reward functions fail for languag
     │  fixed actions  │ │  Claude ReAct  │  │  parallel tasks │
     │  keyword reward │ │  LLM judge     │  │  cached results │
     └────────┬────────┘ └────────┬───────┘  └──────┬──────────┘
-             │                   │                 │
+             │  GenericEnvClient │  GenericEnvClient│
+             │  HTTP/WebSocket   │  HTTP/WebSocket  │
              └───────────────────┴─────────────────┘
                                  │
-                    ┌────────────▼────────────┐
-                    │   ResearchEnvironment   │
-                    │   (OpenEnv + Docker)    │
-                    │  ├── tavily_search      │
-                    │  ├── tavily_extract     │
-                    │  └── tavily_crawl       │
-                    └─────────────────────────┘
+                    ┌────────────▼────────────────────────┐
+                    │   Docker Container (port 8000)      │
+                    │   OpenEnv HTTP server               │
+                    │                                     │
+                    │   Session 1: TraditionalAgent ep.   │
+                    │   Session 2: OpenEnvAgent ep.       │
+                    │   Session 3+: Race agents ...       │
+                    │                                     │
+                    │   Each session = isolated           │
+                    │   ResearchEnvironment instance      │
+                    │   ├── tavily_search                 │
+                    │   ├── tavily_extract                │
+                    │   └── tavily_crawl                  │
+                    └─────────────────────────────────────┘
 ```
+
+> **One container, many sessions.** Agents do not each get their own container in this demo. Instead, `ResearchEnvironment` sets `SUPPORTS_CONCURRENT_SESSIONS = True` and the server is configured with `max_concurrent_envs=10`. Each agent connects via `GenericEnvClient(base_url="http://localhost:8000").sync()` and gets its own isolated session (its own episode state, step counter, and tool usage) inside the same running container. OpenEnv also supports spinning up a fresh container per agent via `GenericEnvClient.from_docker_image()` — that's the heavier, fully-isolated alternative.
 
 ### The Two Agents
 
@@ -50,7 +60,8 @@ The demo proves a core point: **traditional RL reward functions fail for languag
 | Action space | Fixed — `tavily_search` only | Dynamic — discovers all 3 tools |
 | Strategy | Keyword stuffing | Reason → search → extract → crawl |
 | Reward | Keyword match count | LLM-as-judge (Claude rates 1-10) |
-| Isolation | None | Docker container per episode |
+| Environment | Isolated session in Docker container | Isolated session in Docker container |
+| Connection | `GenericEnvClient` via HTTP | `GenericEnvClient` via HTTP |
 | Result | High keyword score, low LLM score | Consistently high LLM score |
 
 ---
@@ -160,7 +171,7 @@ The live Plotly chart updates after every step so the gap is visible in real tim
 
 ### Tab 2 — Agent Race
 
-Three OpenEnv agents race on the same question using OpenEnv's `SUPPORTS_CONCURRENT_SESSIONS`. A live scoreboard updates after each step. First agent to finish wins. Demonstrates OpenEnv's concurrent session isolation — three agents, one environment, no interference.
+Three OpenEnv agents race on the same question using OpenEnv's `SUPPORTS_CONCURRENT_SESSIONS`. A live scoreboard updates after each step. First agent to finish wins. All three agents connect to the **same Docker container** — each gets its own isolated session with independent episode state. No interference between sessions despite sharing one process.
 
 ### Tab 3 — Parallel Flyte Fan-out
 

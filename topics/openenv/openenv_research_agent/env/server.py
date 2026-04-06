@@ -22,6 +22,11 @@ def env_factory() -> ResearchEnvironment:
     return ResearchEnvironment(reward_fn=keyword_reward)
 
 
+# max_concurrent_envs=10 — one container, up to 10 independent sessions.
+# Each agent that connects (via GenericEnvClient) gets its own ResearchEnvironment
+# instance with isolated episode state. This is NOT one container per agent —
+# it's one container shared by all agents, with session isolation handled internally.
+# To get a fresh container per agent instead, use GenericEnvClient.from_docker_image().
 app = create_app(
     env=env_factory,
     action_cls=ResearchAction,

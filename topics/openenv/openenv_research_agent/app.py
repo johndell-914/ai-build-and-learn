@@ -480,11 +480,14 @@ def create_demo():
                     outputs=[fanout_results, fanout_link],
                 )
 
+        gr.Markdown(
+            "**Suggested questions** — these produce the largest reward hacking gap:"
+        )
         gr.Examples(
             examples=[
-                ["What is Model Context Protocol (MCP)?"],
-                ["How does retrieval-augmented generation work?"],
-                ["What are the key differences between OpenEnv and OpenAI Gym?"],
+                ["How does retrieval-augmented generation compare to fine-tuning for production LLM applications?"],
+                ["What are the key differences between LangGraph and AutoGen for building multi-agent AI systems?"],
+                ["Compare CoreWeave vs Lambda Labs GPU cloud pricing, availability, and performance benchmarks"],
             ],
             inputs=comp_query,
         )

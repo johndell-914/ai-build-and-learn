@@ -26,4 +26,4 @@ COPY reward.py .
 
 # OpenEnv server entrypoint — creates a FastAPI app via create_app() and
 # runs it with uvicorn. See env/server.py for the full setup.
-CMD ["python", "env/server.py"]
+CMD ["python", "-m", "env.server"]

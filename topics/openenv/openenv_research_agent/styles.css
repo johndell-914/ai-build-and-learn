@@ -1,0 +1,167 @@
+/*
+ * OpenEnv Research Agent Demo — Gradio UI Styles
+ *
+ * Loaded via gr.Blocks(css=...) in app.py.
+ * Defines shared classes used by ui_components.py HTML builders.
+ */
+
+/* ── Step cards ─────────────────────────────────────────────────────────── */
+
+.step-card {
+    padding: 6px 10px;
+    margin: 6px 0;
+    border-radius: 4px;
+}
+
+.step-card-trad {
+    border-left: 4px solid #e67e22;
+    background: #fdf6ec;
+}
+
+.step-card-oe {
+    border-left: 4px solid #2471a3;
+    background: #eaf4fb;
+}
+
+.step-title {
+    font-weight: bold;
+    color: #111;
+}
+
+.step-detail {
+    color: #555;
+    font-size: 0.85em;
+    margin-top: 3px;
+}
+
+.step-preview {
+    color: #666;
+    font-size: 0.80em;
+    margin-top: 3px;
+    font-style: italic;
+}
+
+/* ── Keyword tags ────────────────────────────────────────────────────────── */
+
+.kw-tag {
+    background: #fdebd0;
+    color: #784212;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.80em;
+}
+
+/* ── Score badges ────────────────────────────────────────────────────────── */
+
+.badge {
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.85em;
+}
+
+.badge-trad  { background: #e67e22; }
+.badge-oe    { background: #1a7a4a; }
+.badge-red   { background: #c0392b; }
+
+.tool-badge {
+    color: white;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: 0.82em;
+}
+
+.tool-search  { background: #2980b9; }
+.tool-extract { background: #8e44ad; }
+.tool-crawl   { background: #16a085; }
+
+/* ── Final score block ───────────────────────────────────────────────────── */
+
+.final-score-block {
+    text-align: center;
+    padding: 12px;
+    margin: 8px 0;
+    border-radius: 8px;
+    color: white;
+}
+
+.final-score-label { font-size: 0.9em; }
+.final-score-value { font-size: 2em; font-weight: bold; }
+
+/* ── Summary callout ─────────────────────────────────────────────────────── */
+
+.summary-box {
+    border-left: 4px solid;
+    padding: 8px 12px;
+    margin: 10px 0;
+    background: #f9f9f9;
+    border-radius: 4px;
+    color: #111;
+}
+
+.summary-title {
+    font-weight: bold;
+    margin-bottom: 4px;
+    color: #111;
+}
+
+/* ── Race summary card ───────────────────────────────────────────────────── */
+
+.race-card {
+    margin-top: 14px;
+    border: 1px solid #a9dfbf;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.race-card-header {
+    background: #1a7a4a;
+    color: white;
+    padding: 10px 16px;
+    font-weight: bold;
+    font-size: 1.05em;
+}
+
+.race-card-narrative {
+    background: #eafaf1;
+    padding: 12px 16px;
+    color: #111;
+    line-height: 1.7;
+    border-bottom: 1px solid #a9dfbf;
+}
+
+.race-card-scores {
+    background: #f9f9f9;
+    padding: 10px 0;
+    border-bottom: 1px solid #ddd;
+}
+
+.race-card-footer {
+    background: #2c3e50;
+    padding: 12px 16px;
+    color: white;
+    font-size: 0.92em;
+    line-height: 1.6;
+}
+
+/* ── Race scoreboard table ───────────────────────────────────────────────── */
+
+.race-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: monospace;
+    color: #111;
+}
+
+.race-table th {
+    padding: 8px 12px;
+    text-align: left;
+    background: #2c3e50;
+    color: white;
+}
+
+.race-table td {
+    padding: 8px 12px;
+    color: #111;
+}

@@ -85,7 +85,9 @@ topics/openenv/openenv_research_agent/
 ├── system_prompt.py         # Claude's research instructions
 ├── workflow.py              # Flyte tasks + parallel pipeline
 ├── config.py                # Flyte TaskEnvironment + secrets
-├── app.py                   # Gradio UI (3 demo tabs)
+├── app.py                   # Gradio UI — tab wiring and agent orchestration
+├── ui_components.py         # Plotly chart builders and HTML card builders
+├── styles.css               # CSS classes used by ui_components.py
 ├── requirements.txt         # Full project dependencies
 └── requirements_env.txt     # Docker container dependencies only
 ```

@@ -189,7 +189,7 @@ def final_score_block(label: str, score: float, color: str) -> str:
 
 def agent_summary(title: str, color: str, lines: list[str]) -> str:
     """Callout box summarising one agent's episode results."""
-    content = "".join(f'<div style="margin:2px 0;color:#111">{l}</div>' for l in lines)
+    content = "".join(f'<div style="margin:2px 0;color:#ccc">{l}</div>' for l in lines)
     return (
         f'<div class="summary-box" style="border-color:{color}">'
         f'<div class="summary-title" style="color:{color}">{title}</div>'
@@ -225,15 +225,15 @@ def race_scoreboard(
         score_str = f"{final_scores[i]:.2f}" if final_scores[i] is not None else "-"
         rows += (
             f'<tr style="background:{row_bg}">'
-            f'<td style="padding:8px 12px;font-weight:bold;color:#111">Agent {i}</td>'
-            f'<td style="padding:8px 12px;color:#333">{step_counts[i]}</td>'
-            f'<td style="padding:8px 12px;color:#333">{score_str}</td>'
+            f'<td style="padding:8px 12px;font-weight:bold;color:#ccc">Agent {i}</td>'
+            f'<td style="padding:8px 12px;color:#aaa">{step_counts[i]}</td>'
+            f'<td style="padding:8px 12px;color:#aaa">{score_str}</td>'
             f'<td style="padding:8px 12px">{status}</td>'
             f'</tr>'
         )
 
     return (
-        f'<div style="color:#111">'
+        f'<div style="color:#ccc">'
         f'<table class="race-table">'
         f'<tr>'
         f'<th>Agent</th><th>Steps</th><th>Final LLM Score</th><th>Status</th>'
@@ -291,7 +291,7 @@ def race_summary(
         return "#888"
 
     score_cells = "".join(
-        f'<td style="padding:8px 16px;text-align:center;color:#111;border-right:1px solid #ddd">'
+        f'<td style="padding:8px 16px;text-align:center;color:#ccc;border-right:1px solid #333">'
         f'<div style="font-size:1.6em;font-weight:bold;color:{_score_color(i)}">{all_scores[i]:.2f}</div>'
         f'<div style="font-size:0.85em;color:#555;margin-top:2px">Agent {i}'
         f'{"&nbsp;&#127942;" if i == winner else ""}'
@@ -310,12 +310,12 @@ def race_summary(
         f'<div class="race-card-scores">'
         f'<table style="width:100%;border-collapse:collapse">'
         f'<tr>'
-        f'<td style="padding:6px 16px;color:#333;font-size:0.9em;font-weight:bold;'
-        f'border-right:1px solid #ddd;white-space:nowrap">Final LLM Scores</td>'
+        f'<td style="padding:6px 16px;color:#aaa;font-size:0.9em;font-weight:bold;'
+        f'border-right:1px solid #333;white-space:nowrap">Final LLM Scores</td>'
         f'{score_cells}'
-        f'<td style="padding:8px 16px;color:#111;font-size:0.92em;white-space:nowrap">'
-        f'Avg: <b style="color:#111">{avg_score:.2f}</b><br>'
-        f'Sessions: <b style="color:#111">3 concurrent</b>'
+        f'<td style="padding:8px 16px;color:#ccc;font-size:0.92em;white-space:nowrap">'
+        f'Avg: <b style="color:#ccc">{avg_score:.2f}</b><br>'
+        f'Sessions: <b style="color:#ccc">3 concurrent</b>'
         f'</td>'
         f'</tr>'
         f'</table>'
@@ -374,7 +374,7 @@ def fanout_results_table(results: list[dict]) -> str:
 
             # Only show query text on the first row of each pair
             query_cell = (
-                f'<td style="padding:8px 12px;color:#111;vertical-align:top">{query}</td>'
+                f'<td style="padding:8px 12px;color:#ccc;vertical-align:top">{query}</td>'
                 if agent_type == "openenv"
                 else '<td style="padding:8px 12px"></td>'
             )
@@ -384,15 +384,15 @@ def fanout_results_table(results: list[dict]) -> str:
                 f'{query_cell}'
                 f'<td style="padding:8px 12px">'
                 f'<span class="badge {badge_class}">{agent_type}</span></td>'
-                f'<td style="padding:8px 12px;color:#333;text-align:center">{r["total_steps"]}</td>'
-                f'<td style="padding:8px 12px;color:#333;text-align:center">{kw_str}</td>'
+                f'<td style="padding:8px 12px;color:#aaa;text-align:center">{r["total_steps"]}</td>'
+                f'<td style="padding:8px 12px;color:#aaa;text-align:center">{kw_str}</td>'
                 f'<td style="padding:8px 12px;font-weight:bold;text-align:center;'
                 f'color:{llm_color}">{llm_str}</td>'
                 f'</tr>'
             )
 
     return (
-        f'<div style="color:#111">'
+        f'<div style="color:#ccc">'
         f'<table class="race-table" style="font-family:inherit">'
         f'<tr>'
         f'<th style="width:45%">Query</th>'

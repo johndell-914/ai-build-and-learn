@@ -373,131 +373,198 @@ def run_flyte_fanout(queries_text: str, max_steps: int):
 
 _RUN_MODE_CHOICES = ["Local Process", "Flyte Task"]
 
+_EXAMPLE_QUESTIONS = [
+    "How does retrieval-augmented generation compare to fine-tuning for production LLM applications?",
+    "What are the key differences between LangGraph and AutoGen for building multi-agent AI systems?",
+    "Compare CoreWeave vs Lambda Labs GPU cloud pricing, availability, and performance benchmarks",
+]
+
+
+def _example_list(target_id: str, questions: list[str] = _EXAMPLE_QUESTIONS) -> str:
+    """
+    Render example questions as a plain HTML list.
+    Clicking a question fires a JS CustomEvent that Gradio's .select() picks up,
+    but since that's complex we use a simpler approach: each item is a button that
+    sets the value of the nearest textarea via DOM traversal.
+    """
+    items = "".join(
+        f'<div class="ex-item" onclick="'
+        f'(function(el){{var ta=document.getElementById(\'{target_id}-query\');'
+        f'if(!ta){{ta=el.closest(\'.panel-group\').querySelector(\'textarea\');}} '
+        f'if(ta){{var nativeInputValueSetter=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,\'value\').set;'
+        f'nativeInputValueSetter.call(ta,{repr(q)});ta.dispatchEvent(new Event(\'input\',{{bubbles:true}}))}}'
+        f'}})(this)">{q}</div>'
+        for q in questions
+    )
+    return f'<div class="ex-list"><div class="ex-label">Example questions</div>{items}</div>'
+
 def create_demo():
     css = open(_CSS_PATH).read()
-    with gr.Blocks(title="OpenEnv Research Agent Demo", css=css) as demo:
-        gr.Markdown(
-            "# OpenEnv Research Agent Demo\n"
-            "Showcasing OpenEnv + Flyte + Tavily + Claude\n\n"
-            "**Traditional RL** games keyword rewards. "
-            "**OpenEnv** uses LLM-as-judge for meaningful signals."
+
+    theme = gr.themes.Base(
+        primary_hue=gr.themes.colors.orange,
+        neutral_hue=gr.themes.colors.slate,
+        font=gr.themes.GoogleFont("Inter"),
+    ).set(
+        body_background_fill="#0f0f0f",
+        body_background_fill_dark="#0f0f0f",
+        body_text_color="#e0e0e0",
+        body_text_color_dark="#e0e0e0",
+        background_fill_primary="#1a1a1a",
+        background_fill_primary_dark="#1a1a1a",
+        background_fill_secondary="#141414",
+        background_fill_secondary_dark="#141414",
+        border_color_primary="#2a2a2a",
+        border_color_primary_dark="#2a2a2a",
+        button_primary_background_fill="#e07b39",
+        button_primary_background_fill_hover="#c96a28",
+        button_primary_background_fill_dark="#e07b39",
+        button_primary_background_fill_hover_dark="#c96a28",
+        button_primary_text_color="#ffffff",
+        button_primary_text_color_dark="#ffffff",
+        input_background_fill="#1e1e1e",
+        input_background_fill_dark="#1e1e1e",
+        input_border_color="#2a2a2a",
+        input_border_color_dark="#2a2a2a",
+        block_background_fill="#1a1a1a",
+        block_background_fill_dark="#1a1a1a",
+        block_border_color="#2a2a2a",
+        block_border_color_dark="#2a2a2a",
+        block_label_text_color="#888",
+        block_label_text_color_dark="#888",
+        block_title_text_color="#e0e0e0",
+        block_title_text_color_dark="#e0e0e0",
+    )
+
+    with gr.Blocks(title="OpenEnv Research Agent", css=css, theme=theme) as demo:
+
+        # ── Header ────────────────────────────────────────────────────────
+        gr.HTML(
+            '<div class="app-header">'
+            '<span class="app-title">OpenEnv Research Agent</span>'
+            '<span class="app-tagline">OpenEnv &nbsp;·&nbsp; Flyte &nbsp;·&nbsp; Tavily &nbsp;·&nbsp; Claude</span>'
+            '</div>'
         )
 
-        with gr.Tabs():
+        with gr.Row(elem_id="main-layout"):
 
-            # --- Tab 1: Side-by-Side Comparison ---
-            with gr.Tab("Side-by-Side Comparison"):
-                gr.Markdown(
-                    "Run both agents on the same question. Watch keyword reward get gamed "
-                    "while LLM judge stays honest.\n\n"
-                    "**Local Process** — live chart updates per step. "
-                    "**Flyte Task** — parallel tasks on the cluster; final results only + Flyte console link."
+            # ── Left sidebar ──────────────────────────────────────────────
+            with gr.Column(scale=1, elem_id="sidebar"):
+
+                mode_select = gr.Radio(
+                    choices=["Side-by-Side", "Agent Race", "Fan-out"],
+                    value="Side-by-Side",
+                    label="Demo Mode",
+                    elem_classes="mode-nav",
                 )
-                with gr.Row():
+
+                gr.HTML('<div class="sidebar-sep"></div>')
+
+                # Side-by-Side inputs
+                with gr.Group(visible=True) as comp_panel:
+                    gr.HTML('<p class="panel-desc">Run both agents on the same question. '
+                            'Watch keyword reward get gamed while LLM judge stays honest.</p>')
                     comp_query = gr.Textbox(
                         label="Research Question",
                         placeholder="What is Model Context Protocol (MCP)?",
-                        scale=4,
+                        lines=3,
                     )
-                    comp_steps = gr.Slider(minimum=3, maximum=15, value=6, step=1, label="Max Steps", scale=1)
-                    comp_mode = gr.Radio(
-                        choices=_RUN_MODE_CHOICES,
-                        value="Local Process",
-                        label="Run Mode",
-                        scale=1,
-                    )
-                    comp_btn = gr.Button("Run Comparison", variant="primary", scale=0)
+                    comp_steps = gr.Slider(minimum=3, maximum=15, value=6, step=1, label="Max Steps")
+                    comp_mode = gr.Radio(choices=_RUN_MODE_CHOICES, value="Local Process", label="Run Mode")
+                    comp_btn = gr.Button("Run Comparison →", variant="primary")
+                    gr.HTML(_example_list("comp", [
+                        "How does retrieval-augmented generation compare to fine-tuning for production LLM applications?",
+                        "What are the key differences between LangGraph and AutoGen for building multi-agent AI systems?",
+                        "Compare CoreWeave vs Lambda Labs GPU cloud pricing, availability, and performance benchmarks",
+                    ]))
 
-                comp_link = gr.HTML()
-                reward_chart = gr.Plot(label="Reward Comparison")
-
-                with gr.Row():
-                    with gr.Column():
-                        gr.Markdown("**Traditional RL Agent Steps**")
-                        trad_log = gr.HTML()
-                    with gr.Column():
-                        gr.Markdown("**OpenEnv Agent Steps**")
-                        oe_log = gr.HTML()
-
-                comp_btn.click(
-                    fn=run_comparison,
-                    inputs=[comp_query, comp_steps, comp_mode],
-                    outputs=[reward_chart, trad_log, oe_log, comp_link],
-                )
-                gr.Examples(
-                    examples=[
-                        ["How does retrieval-augmented generation compare to fine-tuning for production LLM applications?"],
-                        ["What are the key differences between LangGraph and AutoGen for building multi-agent AI systems?"],
-                        ["Compare CoreWeave vs Lambda Labs GPU cloud pricing, availability, and performance benchmarks"],
-                    ],
-                    inputs=comp_query,
-                    label="Suggested questions (largest reward hacking gap)",
-                )
-
-            # --- Tab 2: Agent Race ---
-            with gr.Tab("Agent Race"):
-                gr.Markdown(
-                    "3 OpenEnv agents race on the same question.\n\n"
-                    "**Local Process** — concurrent sessions in the local Docker container "
-                    "(SUPPORTS_CONCURRENT_SESSIONS); live scoreboard per step. "
-                    "**Flyte Task** — 3 parallel tasks on the cluster; winner = first task to complete."
-                )
-                with gr.Row():
+                # Agent Race inputs
+                with gr.Group(visible=False) as race_panel:
+                    gr.HTML('<p class="panel-desc">3 OpenEnv agents race on the same question '
+                            'with concurrent Docker sessions (SUPPORTS_CONCURRENT_SESSIONS).</p>')
                     race_query = gr.Textbox(
                         label="Research Question",
                         placeholder="How does retrieval-augmented generation work?",
-                        scale=4,
+                        lines=3,
                     )
-                    race_steps = gr.Slider(minimum=3, maximum=15, value=6, step=1, label="Max Steps", scale=1)
-                    race_mode = gr.Radio(
-                        choices=_RUN_MODE_CHOICES,
-                        value="Local Process",
-                        label="Run Mode",
-                        scale=1,
-                    )
-                    race_btn = gr.Button("Start Race", variant="primary", scale=0)
+                    race_steps = gr.Slider(minimum=3, maximum=15, value=6, step=1, label="Max Steps")
+                    race_mode = gr.Radio(choices=_RUN_MODE_CHOICES, value="Local Process", label="Run Mode")
+                    race_btn = gr.Button("Start Race →", variant="primary")
+                    gr.HTML(_example_list("race"))
 
-                race_link = gr.HTML()
-                race_board = gr.HTML(label="Live Scoreboard")
-
-                race_btn.click(
-                    fn=run_race,
-                    inputs=[race_query, race_steps, race_mode],
-                    outputs=[race_board, race_link],
-                )
-                gr.Examples(
-                    examples=[
-                        ["How does retrieval-augmented generation compare to fine-tuning for production LLM applications?"],
-                        ["What are the key differences between LangGraph and AutoGen for building multi-agent AI systems?"],
-                        ["Compare CoreWeave vs Lambda Labs GPU cloud pricing, availability, and performance benchmarks"],
-                    ],
-                    inputs=race_query,
-                    label="Suggested questions",
-                )
-
-            # --- Tab 3: Parallel Flyte Fan-out ---
-            with gr.Tab("Parallel Flyte Fan-out"):
-                gr.Markdown(
-                    "Submit multiple research questions at once. Each dispatches as a parallel "
-                    "Flyte task — both agents run simultaneously per question."
-                )
-                with gr.Row():
+                # Fan-out inputs
+                with gr.Group(visible=False) as fanout_panel:
+                    gr.HTML('<p class="panel-desc">Submit multiple research questions at once '
+                            'as parallel Flyte tasks — both agents run per question.</p>')
                     fanout_queries = gr.Textbox(
                         label="Research Questions (one per line)",
                         placeholder="What is MCP?\nHow does RAG work?\nWhat are AI agents?",
-                        lines=4,
-                        scale=3,
+                        lines=5,
                     )
-                    fanout_steps = gr.Slider(minimum=3, maximum=15, value=6, step=1, label="Max Steps", scale=1)
-                fanout_btn = gr.Button("Run on Flyte", variant="primary")
-                fanout_link = gr.HTML()
-                fanout_results = gr.HTML(label="Results")
+                    fanout_steps = gr.Slider(minimum=3, maximum=15, value=6, step=1, label="Max Steps")
+                    fanout_btn = gr.Button("Run on Flyte →", variant="primary")
 
-                fanout_btn.click(
-                    fn=run_flyte_fanout,
-                    inputs=[fanout_queries, fanout_steps],
-                    outputs=[fanout_results, fanout_link],
-                )
+            # ── Right content area ────────────────────────────────────────
+            with gr.Column(scale=2, elem_id="content-area"):
+
+                # Side-by-Side outputs
+                with gr.Group(visible=True) as comp_out:
+                    comp_link = gr.HTML()
+                    reward_chart = gr.Plot(label="Reward Comparison")
+                    with gr.Row():
+                        with gr.Column():
+                            gr.HTML('<div class="col-label">Traditional RL Agent</div>')
+                            trad_log = gr.HTML()
+                        with gr.Column():
+                            gr.HTML('<div class="col-label">OpenEnv Agent</div>')
+                            oe_log = gr.HTML()
+
+                # Agent Race outputs
+                with gr.Group(visible=False) as race_out:
+                    race_link = gr.HTML()
+                    race_board = gr.HTML()
+
+                # Fan-out outputs
+                with gr.Group(visible=False) as fanout_out:
+                    fanout_link = gr.HTML()
+                    fanout_results = gr.HTML()
+
+        # ── Mode switching ────────────────────────────────────────────────
+        def switch_mode(mode):
+            is_comp   = mode == "Side-by-Side"
+            is_race   = mode == "Agent Race"
+            is_fanout = mode == "Fan-out"
+            return (
+                gr.update(visible=is_comp),
+                gr.update(visible=is_race),
+                gr.update(visible=is_fanout),
+                gr.update(visible=is_comp),
+                gr.update(visible=is_race),
+                gr.update(visible=is_fanout),
+            )
+
+        mode_select.change(
+            fn=switch_mode,
+            inputs=[mode_select],
+            outputs=[comp_panel, race_panel, fanout_panel, comp_out, race_out, fanout_out],
+        )
+
+        # ── Button wiring ─────────────────────────────────────────────────
+        comp_btn.click(
+            fn=run_comparison,
+            inputs=[comp_query, comp_steps, comp_mode],
+            outputs=[reward_chart, trad_log, oe_log, comp_link],
+        )
+        race_btn.click(
+            fn=run_race,
+            inputs=[race_query, race_steps, race_mode],
+            outputs=[race_board, race_link],
+        )
+        fanout_btn.click(
+            fn=run_flyte_fanout,
+            inputs=[fanout_queries, fanout_steps],
+            outputs=[fanout_results, fanout_link],
+        )
 
     return demo
 

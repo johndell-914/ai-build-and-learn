@@ -10,8 +10,14 @@ documentation section. More expensive than extract — prefer extract
 when specific URLs are already known.
 """
 
+import time
 from typing import Optional
 from tavily import TavilyClient
+
+
+def _is_rate_limit(error: Exception) -> bool:
+    msg = str(error).lower()
+    return "usage limit" in msg or "rate limit" in msg or "429" in msg
 
 
 def run_crawl(
@@ -36,26 +42,30 @@ def run_crawl(
         limit: Total maximum pages to return (default: 10).
         instructions: Optional natural-language guidance to focus the crawl.
     """
-    try:
-        kwargs = dict(
-            url=url,
-            max_depth=max_depth,
-            max_breadth=max_breadth,
-            limit=limit,
-        )
-        if instructions:
-            kwargs["instructions"] = instructions
+    for attempt in range(3):
+        try:
+            kwargs = dict(
+                url=url,
+                max_depth=max_depth,
+                max_breadth=max_breadth,
+                limit=limit,
+            )
+            if instructions:
+                kwargs["instructions"] = instructions
 
-        response = client.crawl(**kwargs)
-        return {
-            "root_url": url,
-            "results": [
-                {
-                    "url": r.get("url", ""),
-                    "raw_content": r.get("raw_content", ""),
-                }
-                for r in response.get("results", [])
-            ],
-        }
-    except Exception as e:
-        return {"root_url": url, "error": str(e), "results": []}
+            response = client.crawl(**kwargs)
+            return {
+                "root_url": url,
+                "results": [
+                    {
+                        "url": r.get("url", ""),
+                        "raw_content": r.get("raw_content", ""),
+                    }
+                    for r in response.get("results", [])
+                ],
+            }
+        except Exception as e:
+            if _is_rate_limit(e) and attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            return {"root_url": url, "error": str(e), "results": []}

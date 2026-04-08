@@ -228,6 +228,7 @@ class OpenEnvAgent:
 
                     # Handle finish, episode done, or step limit after feeding all results back
                     if finish_requested or episode_done or step_count >= self.max_steps:
+                        env_state = _get_state(client)
                         llm_final = llm_judge_final_reward(
                             query=self.query,
                             accumulated_results=accumulated_results,
@@ -237,6 +238,7 @@ class OpenEnvAgent:
                             "tool_name": "final_judgment",
                             "tool_args": {},
                             "llm_final_score": llm_final,
+                            "env_state": env_state,
                             "done": True,
                             "agent_id": self.agent_id,
                             "agent": "openenv",
@@ -251,6 +253,7 @@ class OpenEnvAgent:
                     if final_text:
                         accumulated_results.append({"text": final_text})
 
+                    env_state = _get_state(client)
                     llm_final = llm_judge_final_reward(
                         query=self.query,
                         accumulated_results=accumulated_results,
@@ -260,6 +263,7 @@ class OpenEnvAgent:
                         "tool_name": "final_judgment",
                         "tool_args": {},
                         "llm_final_score": llm_final,
+                        "env_state": env_state,
                         "result_preview": final_text[:500],
                         "done": True,
                         "agent_id": self.agent_id,
@@ -268,6 +272,7 @@ class OpenEnvAgent:
                     return
 
             # Hit max steps — compute final reward on what was gathered
+            env_state = _get_state(client)
             llm_final = llm_judge_final_reward(
                 query=self.query,
                 accumulated_results=accumulated_results,
@@ -277,6 +282,7 @@ class OpenEnvAgent:
                 "tool_name": "final_judgment",
                 "tool_args": {},
                 "llm_final_score": llm_final,
+                "env_state": env_state,
                 "done": True,
                 "agent_id": self.agent_id,
                 "agent": "openenv",
@@ -290,3 +296,14 @@ def _preview(result: dict, max_chars: int = 200) -> str:
         return text[:max_chars] + ("..." if len(text) > max_chars else "")
     except Exception:
         return str(result)[:max_chars]
+
+
+def _get_state(client) -> dict:
+    """Safely call client.state and return a plain dict for the step log."""
+    try:
+        s = client.state
+        if hasattr(s, "model_dump"):
+            return s.model_dump()
+        return dict(s) if s else {}
+    except Exception:
+        return {}

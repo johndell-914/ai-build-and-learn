@@ -62,6 +62,8 @@ from ui_components import (
     race_scoreboard,
     race_summary,
     fanout_results_table,
+    narrative_summary,
+    env_state_card,
 )
 
 load_dotenv()
@@ -119,7 +121,7 @@ def run_comparison(query: str, max_steps: int, run_mode: str):
     Always yields 4-tuples: (reward_chart, trad_log_html, oe_log_html, link_html).
     """
     if not query.strip():
-        yield empty_chart("Reward Comparison"), "Enter a research question above.", "", ""
+        yield empty_chart("Reward Comparison"), "Enter a research question above.", "", "", ""
         return
 
     # ── Local Process path ──────────────────────────────────────────────────
@@ -128,6 +130,7 @@ def run_comparison(query: str, max_steps: int, run_mode: str):
         trad_html_blocks, oe_html_blocks = [], []
         trad_final_llm = None
         oe_final_llm = None
+        oe_step_count = 0
 
         trad_agent = TraditionalAgent(query=query, max_steps=max_steps)
         oe_agent = OpenEnvAgent(query=query, max_steps=max_steps)
@@ -165,8 +168,12 @@ def run_comparison(query: str, max_steps: int, run_mode: str):
                         oe_html_blocks.append(
                             final_score_block("Final LLM Judge Score", oe_final_llm, "#1a7a4a")
                         )
+                        env_state = step.get("env_state", {})
+                        if env_state:
+                            oe_html_blocks.append(env_state_card(env_state))
                         oe_done = True
                     else:
+                        oe_step_count += 1
                         oe_html_blocks.append(oe_step_card(
                             step["step"], step["tool_name"],
                             step.get("tool_args", {}), step.get("result_preview", ""),
@@ -181,6 +188,7 @@ def run_comparison(query: str, max_steps: int, run_mode: str):
                 ),
                 "".join(trad_html_blocks),
                 "".join(oe_html_blocks),
+                "",
                 "",
             )
 
@@ -205,18 +213,20 @@ def run_comparison(query: str, max_steps: int, run_mode: str):
             "".join(trad_html_blocks),
             "".join(oe_html_blocks),
             "",
+            narrative_summary(avg_kw, trad_llm_val, oe_llm_val, gap, oe_advantage,
+                               len(trad_kw), oe_step_count),
         )
 
     # ── Flyte Task path ─────────────────────────────────────────────────────
     else:
-        yield empty_chart("Submitting to Flyte..."), "Submitting to Flyte...", "Submitting to Flyte...", ""
+        yield empty_chart("Submitting to Flyte..."), "Submitting to Flyte...", "Submitting to Flyte...", "", ""
 
         result = flyte.with_runcontext(mode=RUN_MODE).run(
             run_side_by_side, query=query, max_steps=max_steps
         )
         link = _flyte_link(getattr(result, "url", None))
 
-        yield empty_chart("Tasks running on Flyte..."), "Tasks running...", "Tasks running...", link
+        yield empty_chart("Tasks running on Flyte..."), "Tasks running...", "Tasks running...", link, ""
 
         result.wait()
         data = json.loads(result.outputs()[0])
@@ -249,6 +259,8 @@ def run_comparison(query: str, max_steps: int, run_mode: str):
             trad_html,
             oe_html,
             link,
+            narrative_summary(trad_avg_kw, trad_final or 0.0, oe_final or 0.0, gap, oe_advantage,
+                               len(kw_scores), len(kw_scores)),
         )
 
 
@@ -380,20 +392,30 @@ _EXAMPLE_QUESTIONS = [
 ]
 
 
-def _example_list(target_id: str, questions: list[str] = _EXAMPLE_QUESTIONS) -> str:
+def _example_list(target_elem_id: str, questions: list[str] = _EXAMPLE_QUESTIONS) -> str:
     """
-    Render example questions as a plain HTML list.
-    Clicking a question fires a JS CustomEvent that Gradio's .select() picks up,
-    but since that's complex we use a simpler approach: each item is a button that
-    sets the value of the nearest textarea via DOM traversal.
+    Render example questions as a clickable HTML list.
+
+    Clicking an item finds the textarea inside the Gradio block whose
+    wrapping div has id=target_elem_id, sets its value, and dispatches
+    an input event so Gradio picks up the change.
     """
+    def _onclick(q: str) -> str:
+        escaped = q.replace("'", "\\'")
+        return (
+            f"(function(){{"
+            f"var wrap=document.getElementById('{target_elem_id}');"
+            f"var ta=wrap?wrap.querySelector('textarea'):null;"
+            f"if(ta){{"
+            f"var s=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;"
+            f"s.call(ta,'{escaped}');"
+            f"ta.dispatchEvent(new Event('input',{{bubbles:true}}));"
+            f"}}"
+            f"}})()"
+        )
+
     items = "".join(
-        f'<div class="ex-item" onclick="'
-        f'(function(el){{var ta=document.getElementById(\'{target_id}-query\');'
-        f'if(!ta){{ta=el.closest(\'.panel-group\').querySelector(\'textarea\');}} '
-        f'if(ta){{var nativeInputValueSetter=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,\'value\').set;'
-        f'nativeInputValueSetter.call(ta,{repr(q)});ta.dispatchEvent(new Event(\'input\',{{bubbles:true}}))}}'
-        f'}})(this)">{q}</div>'
+        f'<div class="ex-item" onclick="{_onclick(q)}">{q}</div>'
         for q in questions
     )
     return f'<div class="ex-list"><div class="ex-label">Example questions</div>{items}</div>'
@@ -462,17 +484,19 @@ def create_demo():
 
                 # Side-by-Side inputs
                 with gr.Group(visible=True) as comp_panel:
-                    gr.HTML('<p class="panel-desc">Run both agents on the same question. '
+                    gr.HTML('<div class="panel-heading">Run a Side-by-Side Comparison</div>'
+                            '<p class="panel-desc">Run both agents on the same question. '
                             'Watch keyword reward get gamed while LLM judge stays honest.</p>')
                     comp_query = gr.Textbox(
                         label="Research Question",
-                        placeholder="What is Model Context Protocol (MCP)?",
+                        placeholder="Type a research question or select a sample question from below",
                         lines=3,
+                        elem_id="comp-query",
                     )
                     comp_steps = gr.Slider(minimum=3, maximum=15, value=6, step=1, label="Max Steps")
                     comp_mode = gr.Radio(choices=_RUN_MODE_CHOICES, value="Local Process", label="Run Mode")
                     comp_btn = gr.Button("Run Comparison →", variant="primary")
-                    gr.HTML(_example_list("comp", [
+                    gr.HTML(_example_list("comp-query", [
                         "How does retrieval-augmented generation compare to fine-tuning for production LLM applications?",
                         "What are the key differences between LangGraph and AutoGen for building multi-agent AI systems?",
                         "Compare CoreWeave vs Lambda Labs GPU cloud pricing, availability, and performance benchmarks",
@@ -480,25 +504,28 @@ def create_demo():
 
                 # Agent Race inputs
                 with gr.Group(visible=False) as race_panel:
-                    gr.HTML('<p class="panel-desc">3 OpenEnv agents race on the same question '
+                    gr.HTML('<div class="panel-heading">Start an Agent Race</div>'
+                            '<p class="panel-desc">3 OpenEnv agents race on the same question '
                             'with concurrent Docker sessions (SUPPORTS_CONCURRENT_SESSIONS).</p>')
                     race_query = gr.Textbox(
                         label="Research Question",
-                        placeholder="How does retrieval-augmented generation work?",
+                        placeholder="Type a research question or select a sample question from below",
                         lines=3,
+                        elem_id="race-query",
                     )
                     race_steps = gr.Slider(minimum=3, maximum=15, value=6, step=1, label="Max Steps")
                     race_mode = gr.Radio(choices=_RUN_MODE_CHOICES, value="Local Process", label="Run Mode")
                     race_btn = gr.Button("Start Race →", variant="primary")
-                    gr.HTML(_example_list("race"))
+                    gr.HTML(_example_list("race-query"))
 
                 # Fan-out inputs
                 with gr.Group(visible=False) as fanout_panel:
-                    gr.HTML('<p class="panel-desc">Submit multiple research questions at once '
+                    gr.HTML('<div class="panel-heading">Parallel Flyte Fan-out</div>'
+                            '<p class="panel-desc">Submit multiple research questions at once '
                             'as parallel Flyte tasks — both agents run per question.</p>')
                     fanout_queries = gr.Textbox(
                         label="Research Questions (one per line)",
-                        placeholder="What is MCP?\nHow does RAG work?\nWhat are AI agents?",
+                        placeholder="Type a research question or select a sample question from below",
                         lines=5,
                     )
                     fanout_steps = gr.Slider(minimum=3, maximum=15, value=6, step=1, label="Max Steps")
@@ -518,6 +545,7 @@ def create_demo():
                         with gr.Column():
                             gr.HTML('<div class="col-label">OpenEnv Agent</div>')
                             oe_log = gr.HTML()
+                    narrative_html = gr.HTML()
 
                 # Agent Race outputs
                 with gr.Group(visible=False) as race_out:
@@ -553,7 +581,7 @@ def create_demo():
         comp_btn.click(
             fn=run_comparison,
             inputs=[comp_query, comp_steps, comp_mode],
-            outputs=[reward_chart, trad_log, oe_log, comp_link],
+            outputs=[reward_chart, trad_log, oe_log, comp_link, narrative_html],
         )
         race_btn.click(
             fn=run_race,

@@ -22,15 +22,24 @@ import plotly.graph_objects as go
 # Chart builders
 # ---------------------------------------------------------------------------
 
+_DARK = dict(
+    paper_bgcolor="#1a1a1a",
+    plot_bgcolor="#141414",
+    font=dict(color="#aaa"),
+)
+
+_AXIS = dict(gridcolor="#2a2a2a", zerolinecolor="#2a2a2a", color="#aaa")
+
+
 def empty_chart(title: str) -> go.Figure:
     """Return a blank placeholder chart before any agent has run."""
     fig = go.Figure()
     fig.update_layout(
-        title=title,
-        xaxis_title="Step",
-        yaxis_title="Score (0-1)",
-        yaxis=dict(range=[0, 1]),
+        title=dict(text=title, font=dict(color="#ccc")),
+        xaxis=dict(title="Step", **_AXIS),
+        yaxis=dict(title="Score (0-1)", range=[0, 1], **_AXIS),
         height=320,
+        **_DARK,
     )
     return fig
 
@@ -85,11 +94,13 @@ def build_reward_chart(
         )
 
     fig.update_layout(
-        title=title,
-        xaxis=dict(title="Step", dtick=1, range=[0.5, max_x + 0.5]),
-        yaxis=dict(range=[0, 1.05], title="Score (0-1)"),
+        title=dict(text=title, font=dict(color="#ccc")),
+        xaxis=dict(title="Step", dtick=1, range=[0.5, max_x + 0.5], **_AXIS),
+        yaxis=dict(title="Score (0-1)", range=[0, 1.05], **_AXIS),
         height=320,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    font=dict(color="#aaa"), bgcolor="rgba(0,0,0,0)"),
+        **_DARK,
     )
     return fig
 
@@ -403,5 +414,196 @@ def fanout_results_table(results: list[dict]) -> str:
         f'</tr>'
         f'{rows}'
         f'</table>'
+        f'</div>'
+    )
+
+
+# ---------------------------------------------------------------------------
+# Environment state card (Tab 1) — output of client.state
+# ---------------------------------------------------------------------------
+
+def env_state_card(state: dict) -> str:
+    """
+    HTML card showing the OpenEnv episode state returned by client.state.
+
+    Displays tool_usage counts, total accumulated reward, and step progress.
+    Called after the final step so the full episode record is visible.
+    """
+    if not state:
+        return ""
+
+    tool_usage = state.get("tool_usage", {})
+    total_reward = state.get("total_reward", 0.0)
+    step = state.get("step", 0)
+    max_steps = state.get("max_steps", "?")
+    done = state.get("done", False)
+
+    tool_rows = "".join(
+        f'<div style="display:flex;justify-content:space-between;padding:3px 0;'
+        f'border-bottom:1px solid #2a2a2a">'
+        f'<span style="color:#aaa">{tool}</span>'
+        f'<span style="color:#e0e0e0;font-weight:600">{count}x</span>'
+        f'</div>'
+        for tool, count in tool_usage.items()
+    )
+
+    status_color = "#1a7a4a" if done else "#b7770d"
+    status_text = "complete" if done else "in progress"
+
+    return (
+        f'<div style="margin:10px 0;border:1px solid #2a2a2a;border-radius:6px;overflow:hidden">'
+        f'<div style="background:#1e1e1e;padding:8px 12px;font-size:0.78em;font-weight:700;'
+        f'text-transform:uppercase;letter-spacing:0.07em;color:#555;border-bottom:1px solid #2a2a2a">'
+        f'&#128202; client.state &mdash; Episode Snapshot</div>'
+        f'<div style="background:#141414;padding:10px 12px">'
+        f'<div style="display:flex;gap:20px;margin-bottom:10px">'
+        f'<div style="text-align:center">'
+        f'<div style="font-size:1.4em;font-weight:700;color:#e0e0e0">{step}/{max_steps}</div>'
+        f'<div style="font-size:0.75em;color:#555;margin-top:2px">Steps</div>'
+        f'</div>'
+        f'<div style="text-align:center">'
+        f'<div style="font-size:1.4em;font-weight:700;color:#e07b39">{total_reward:.2f}</div>'
+        f'<div style="font-size:0.75em;color:#555;margin-top:2px">Total Reward</div>'
+        f'</div>'
+        f'<div style="text-align:center">'
+        f'<div style="font-size:1.4em;font-weight:700;color:{status_color}">{status_text}</div>'
+        f'<div style="font-size:0.75em;color:#555;margin-top:2px">Status</div>'
+        f'</div>'
+        f'</div>'
+        f'<div style="font-size:0.82em;color:#666;margin-bottom:4px;font-weight:600;'
+        f'text-transform:uppercase;letter-spacing:0.05em">Tool Usage</div>'
+        f'{tool_rows}'
+        f'</div>'
+        f'</div>'
+    )
+
+
+# ---------------------------------------------------------------------------
+# Narrative summary (Tab 1)
+# ---------------------------------------------------------------------------
+
+def narrative_summary(
+    avg_kw: float,
+    trad_llm: float,
+    oe_llm: float,
+    gap: float,
+    oe_advantage: float,
+    trad_steps: int,
+    oe_steps: int,
+) -> str:
+    """
+    Dynamic plain-English summary of the Side-by-Side run.
+
+    Always frames the result in terms of why OpenEnv's LLM-as-judge
+    reward produces better outcomes than the traditional keyword metric,
+    using the actual numbers from the run to make the argument concrete.
+    """
+
+    # Gap severity language
+    if gap >= 0.5:
+        gap_desc = "a stark"
+        gap_verb = "completely misrepresents"
+    elif gap >= 0.3:
+        gap_desc = "a significant"
+        gap_verb = "badly overestimates"
+    elif gap >= 0.15:
+        gap_desc = "a clear"
+        gap_verb = "overestimates"
+    else:
+        gap_desc = "a modest"
+        gap_verb = "slightly overestimates"
+
+    # OpenEnv quality language
+    if oe_llm >= 0.75:
+        oe_quality = "high-quality, substantive research"
+    elif oe_llm >= 0.55:
+        oe_quality = "solid, well-directed research"
+    elif oe_llm >= 0.35:
+        oe_quality = "reasonable research with some depth"
+    else:
+        oe_quality = "research with room for improvement"
+
+    # Tool diversity note (OpenEnv uses more steps = more tool types)
+    if oe_steps > trad_steps:
+        tool_note = (
+            f"OpenEnv used {oe_steps} steps vs {trad_steps} for Traditional. "
+            f"Rather than repeating the same search with keyword variations, it chained tools "
+            f"purposefully: <b>tavily_search</b> to find candidate pages, "
+            f"<b>tavily_extract</b> to pull full content from specific URLs, "
+            f"and <b>tavily_crawl</b> to explore related sections &mdash; "
+            f"each call informed by what the previous one found. "
+        )
+    else:
+        tool_note = (
+            f"Both agents used {oe_steps} steps, but OpenEnv's tool choices were purposeful: "
+            f"<b>tavily_search</b> to find URLs, then <b>tavily_extract</b> to read actual page "
+            f"content &mdash; not the same query repeated with keyword stuffing. "
+        )
+
+    # Advantage framing
+    if oe_advantage > 0:
+        advantage_note = (
+            f"The LLM judge correctly awarded OpenEnv <b>{oe_llm:.2f}</b> vs "
+            f"Traditional's <b>{trad_llm:.2f}</b> — "
+            f"a <b>+{oe_advantage:.2f}</b> advantage that reflects real research quality, "
+            f"not keyword frequency."
+        )
+    else:
+        advantage_note = (
+            f"Both agents scored similarly on the LLM judge (<b>{oe_llm:.2f}</b> vs "
+            f"<b>{trad_llm:.2f}</b>), but the keyword metric still "
+            f"{gap_verb} Traditional's actual quality by <b>{gap:.2f}</b>."
+        )
+
+    body = (
+        f"The Traditional RL agent scored <b>{avg_kw:.2f}</b> on the keyword metric "
+        f"by stuffing its queries with topic words on every step &mdash; "
+        f"a textbook example of reward hacking. "
+        f"Yet the LLM judge, evaluating the <em>actual research quality</em>, "
+        f"scored it just <b>{trad_llm:.2f}</b>. "
+        f"That is {gap_desc} gap of <b>{gap:.2f}</b> &mdash; the keyword reward "
+        f"{gap_verb} the true value of the research. "
+        f"<br><br>"
+        f"{tool_note}"
+        f"{advantage_note}"
+        f"<br><br>"
+        f"This is why OpenEnv uses LLM-as-judge rewards: keyword counts "
+        f"measure surface-level matching, not understanding. "
+        f"An agent that optimises for keyword scores will always game the metric "
+        f"rather than answer the question. "
+        f"The <b>client.state</b> snapshot above shows exactly what the OpenEnv environment "
+        f"recorded &mdash; tool usage counts, accumulated reward, and episode status &mdash; "
+        f"making every reward signal inspectable and trustworthy."
+    )
+
+    openenv_how = (
+        f"OpenEnv wraps each research episode in a standard RL environment contract. "
+        f"This demo uses all three core methods:"
+        f"<br><br>"
+        f"<b>reset(query=...)</b> &mdash; called once at the start of every episode. "
+        f"It clears all state (step counter, tool usage, reward history) and sets the "
+        f"research question. This is what makes scores comparable across agents and runs &mdash; "
+        f"every episode starts from the same clean slate, with no carried-over context."
+        f"<br><br>"
+        f"<b>step(action)</b> &mdash; called once per tool invocation. It executes the tool, "
+        f"records the result in episode history, computes the per-step reward, and returns "
+        f"an observation containing the result and a <em>done</em> flag. "
+        f"This is the core feedback loop: the agent sees what each tool call actually found "
+        f"before deciding what to do next &mdash; search, then extract a specific URL, "
+        f"then crawl deeper if needed."
+        f"<br><br>"
+        f"<b>client.state</b> &mdash; called at episode end to retrieve the full environment "
+        f"record: tool usage counts, accumulated reward, step count, and completion status. "
+        f"This is the observability layer &mdash; you can inspect exactly what the agent did "
+        f"and what the environment scored, making the reward signal debuggable and trustworthy. "
+        f"The snapshot above is the live output of this call."
+    )
+
+    return (
+        f'<div class="narrative-card">'
+        f'<div class="narrative-header">&#128214; What just happened</div>'
+        f'<div class="narrative-body">{body}</div>'
+        f'<div class="narrative-header narrative-header-alt">&#9881; How OpenEnv works</div>'
+        f'<div class="narrative-body">{openenv_how}</div>'
         f'</div>'
     )

@@ -92,10 +92,19 @@ body, .gradio-container {
     margin: 14px 0 16px;
 }
 
-/* Panel description text */
+/* Panel heading — "Run a Side-by-Side Comparison" etc. */
+.panel-heading {
+    font-size: 0.99em;      /* Gradio block label ~0.9em × 1.1 */
+    font-weight: 600;
+    color: #e0e0e0;
+    margin: 0 0 6px 0;
+    letter-spacing: -0.01em;
+}
+
+/* Panel description text — same color as research question input, +10% */
 .panel-desc {
-    font-size: 0.81em;
-    color: #aaa;
+    font-size: 0.88em;      /* was 0.81em, +10% ≈ 0.89em */
+    color: #e0e0e0;
     margin: 0 0 14px 0;
     line-height: 1.55;
 }
@@ -115,6 +124,18 @@ body, .gradio-container {
 
 /* ── Mode navigation radio — styled as a vertical sidebar menu ───────────── */
 
+/* "Demo Mode" heading — match Run Comparison button: bold, white, same size */
+.mode-nav > div > span,
+.mode-nav > label > span,
+.mode-nav legend,
+.mode-nav .block-title,
+.mode-nav > .label-wrap span {
+    font-size: 1.0em !important;
+    font-weight: 700 !important;
+    color: #ffffff !important;
+    letter-spacing: 0em !important;
+}
+
 /* Force vertical stacking — target every possible Gradio 6 wrapper */
 .mode-nav .wrap,
 .mode-nav > div,
@@ -131,13 +152,14 @@ body, .gradio-container {
     padding: 9px 12px !important;
     border-radius: 6px !important;
     cursor: pointer !important;
-    color: #777 !important;
-    font-size: 0.88em !important;
-    font-weight: 400 !important;
+    color: #bbb !important;
+    font-size: 1.05em !important;
+    font-weight: 500 !important;
     border: 1px solid transparent !important;
     background: transparent !important;
     transition: background 0.12s, color 0.12s !important;
     width: 100% !important;
+    letter-spacing: 0em !important;
 }
 
 .mode-nav label:hover {
@@ -354,6 +376,41 @@ body, .gradio-container {
     line-height: 1.5 !important;
 }
 
+/* ── Narrative summary card (Tab 1) ─────────────────────────────────────── */
+
+.narrative-card {
+    margin: 16px 0 0;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.narrative-header {
+    background: #1e1e1e;
+    color: #e0e0e0;
+    padding: 10px 16px;
+    font-weight: 700;
+    font-size: 0.95em;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.narrative-header-alt {
+    border-top: 1px solid #2a2a2a;
+}
+
+.narrative-body {
+    background: #141414;
+    padding: 14px 16px;
+    color: #bbb;
+    line-height: 1.75;
+    font-size: 0.92em;
+}
+
+.narrative-body b {
+    color: #e0e0e0;
+}
+
+
 /* ── Example questions list ──────────────────────────────────────────────── */
 
 .ex-list {
@@ -365,13 +422,13 @@ body, .gradio-container {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.07em;
-    color: #444;
+    color: #555;
     margin-bottom: 6px;
 }
 
 .ex-item {
-    font-size: 0.73em;
-    color: #5a5a5a;
+    font-size: 0.88em;     /* matches .panel-desc */
+    color: #e0e0e0;        /* matches research question input text */
     padding: 5px 6px;
     border-radius: 4px;
     cursor: pointer;
@@ -381,6 +438,6 @@ body, .gradio-container {
 }
 
 .ex-item:hover {
-    color: #999;
+    color: #ffffff;
     background: #1c1c1c;
 }

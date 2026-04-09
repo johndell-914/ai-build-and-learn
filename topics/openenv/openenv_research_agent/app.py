@@ -62,6 +62,7 @@ from ui_components import (
     race_scoreboard,
     race_summary,
     fanout_results_table,
+    fanout_narrative_summary,
     narrative_summary,
     env_state_card,
 )
@@ -358,10 +359,10 @@ def run_flyte_fanout(queries_text: str, max_steps: int):
     """
     queries = [q.strip() for q in queries_text.strip().splitlines() if q.strip()]
     if not queries:
-        yield "<p>Enter one research question per line.</p>", ""
+        yield "<p>Enter one research question per line.</p>", "", ""
         return
 
-    yield f"<p>Submitting {len(queries)} queries × 2 agents to Flyte...</p>", ""
+    yield f"<p>Submitting {len(queries)} queries × 2 agents to Flyte...</p>", "", ""
 
     result = flyte.with_runcontext(mode=RUN_MODE).run(
         run_research_comparison,
@@ -370,13 +371,13 @@ def run_flyte_fanout(queries_text: str, max_steps: int):
     )
 
     link = _flyte_link(getattr(result, "url", None))
-    yield f"<p>Tasks running... ({len(queries) * 2} parallel Flyte tasks)</p>", link
+    yield f"<p>Tasks running... ({len(queries) * 2} parallel Flyte tasks)</p>", link, ""
 
     result.wait()
     output = json.loads(result.outputs()[0])
     results = output.get("results", [])
 
-    yield fanout_results_table(results), link
+    yield fanout_results_table(results), link, fanout_narrative_summary(results)
 
 
 # ---------------------------------------------------------------------------
@@ -556,6 +557,7 @@ def create_demo():
                 with gr.Group(visible=False) as fanout_out:
                     fanout_link = gr.HTML()
                     fanout_results = gr.HTML()
+                    fanout_narrative = gr.HTML()
 
         # ── Mode switching ────────────────────────────────────────────────
         def switch_mode(mode):
@@ -591,7 +593,7 @@ def create_demo():
         fanout_btn.click(
             fn=run_flyte_fanout,
             inputs=[fanout_queries, fanout_steps],
-            outputs=[fanout_results, fanout_link],
+            outputs=[fanout_results, fanout_link, fanout_narrative],
         )
 
     return demo

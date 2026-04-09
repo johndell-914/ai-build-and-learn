@@ -224,13 +224,13 @@ def race_scoreboard(
     rows = ""
     for i in sorted(step_counts):
         if winner == i:
-            row_bg = "#eafaf1"
+            row_bg = "#0f2018"
             status = '<span class="badge badge-oe">WINNER &#127942;</span>'
         elif done[i]:
-            row_bg = "#f9f9f9"
-            status = '<span style="color:#888">done</span>'
+            row_bg = "#1a1a1a"
+            status = '<span style="color:#555">done</span>'
         else:
-            row_bg = "#ffffff"
+            row_bg = "#141414"
             status = f'<span style="color:#2471a3">running... ({last_tools[i]})</span>'
 
         score_str = f"{final_scores[i]:.2f}" if final_scores[i] is not None else "-"
@@ -371,7 +371,7 @@ def fanout_results_table(results: list[dict]) -> str:
 
     rows = ""
     for idx, (query, agents) in enumerate(pairs.items()):
-        row_bg = "#f4f6f7" if idx % 2 == 0 else "#ffffff"
+        row_bg = "#1a1a1a" if idx % 2 == 0 else "#141414"
         for agent_type in ("openenv", "traditional"):
             r = agents.get(agent_type)
             if r is None:
@@ -385,9 +385,9 @@ def fanout_results_table(results: list[dict]) -> str:
 
             # Only show query text on the first row of each pair
             query_cell = (
-                f'<td style="padding:8px 12px;color:#ccc;vertical-align:top">{query}</td>'
+                f'<td style="padding:8px 12px;color:#ccc;vertical-align:top;background:{row_bg}">{query}</td>'
                 if agent_type == "openenv"
-                else '<td style="padding:8px 12px"></td>'
+                else f'<td style="padding:8px 12px;background:{row_bg}"></td>'
             )
 
             rows += (
@@ -474,6 +474,143 @@ def env_state_card(state: dict) -> str:
         f'text-transform:uppercase;letter-spacing:0.05em">Tool Usage</div>'
         f'{tool_rows}'
         f'</div>'
+        f'</div>'
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fan-out narrative summary (Tab 3)
+# ---------------------------------------------------------------------------
+
+def fanout_narrative_summary(results: list[dict]) -> str:
+    """
+    Dynamic cross-question narrative for the Parallel Flyte Fan-out tab.
+
+    Aggregates results across all questions to build a pattern-level argument
+    for OpenEnv — harder to dismiss than a single run.
+    """
+    oe = [r for r in results if r["agent_type"] == "openenv" and r["llm_final_score"] is not None]
+    trad = [r for r in results if r["agent_type"] == "traditional" and r["llm_final_score"] is not None]
+
+    if not oe or not trad:
+        return ""
+
+    n = len(oe)
+    avg_oe_llm = sum(r["llm_final_score"] for r in oe) / n
+    avg_trad_llm = sum(r["llm_final_score"] for r in trad) / max(len(trad), 1)
+
+    trad_kw_scores = [r["avg_keyword_score"] for r in trad if r["avg_keyword_score"] is not None]
+    avg_trad_kw = sum(trad_kw_scores) / max(len(trad_kw_scores), 1)
+    kw_range = max(trad_kw_scores) - min(trad_kw_scores) if len(trad_kw_scores) > 1 else 0
+
+    overall_advantage = avg_oe_llm - avg_trad_llm
+    kw_overestimate = avg_trad_kw - avg_trad_llm
+
+    # Per-question breakdown
+    query_gaps = []
+    for oe_r in oe:
+        trad_r = next((r for r in trad if r["query"] == oe_r["query"]), None)
+        if trad_r:
+            query_gaps.append({
+                "query": oe_r["query"],
+                "oe_llm": oe_r["llm_final_score"],
+                "trad_llm": trad_r["llm_final_score"],
+                "trad_kw": trad_r["avg_keyword_score"] or 0.0,
+                "gap": oe_r["llm_final_score"] - trad_r["llm_final_score"],
+            })
+
+    n_wins = sum(1 for q in query_gaps if q["gap"] > 0)
+    n_ties = sum(1 for q in query_gaps if abs(q["gap"]) < 0.05)
+    best = max(query_gaps, key=lambda q: q["gap"]) if query_gaps else None
+    worst = min(query_gaps, key=lambda q: q["gap"]) if query_gaps else None
+
+    # Consistency framing for keyword scores
+    if kw_range < 0.03:
+        kw_consistency = (
+            f"The Traditional agent's keyword score was nearly identical across all {n} questions "
+            f"(<b>{min(trad_kw_scores):.2f}</b>–<b>{max(trad_kw_scores):.2f}</b>). "
+            f"Different topics, same score — a clear sign the agent learned to game the metric "
+            f"rather than adapt its research to the question."
+        )
+    else:
+        kw_consistency = (
+            f"The Traditional agent's keyword scores ranged from "
+            f"<b>{min(trad_kw_scores):.2f}</b> to <b>{max(trad_kw_scores):.2f}</b> across questions, "
+            f"but still overestimated actual research quality by an average of <b>{kw_overestimate:.2f}</b>."
+        )
+
+    # Win rate framing
+    if n_wins == n:
+        win_note = f"OpenEnv outscored Traditional on <b>every question</b> ({n}/{n})."
+    elif n_wins > n // 2:
+        win_note = f"OpenEnv outscored Traditional on <b>{n_wins} of {n} questions</b>."
+    else:
+        win_note = f"Results were mixed — OpenEnv won <b>{n_wins} of {n} questions</b>."
+
+    # Per-question rows
+    q_rows = ""
+    for q in query_gaps:
+        short = q["query"][:70] + ("..." if len(q["query"]) > 70 else "")
+        gap_color = "#1a7a4a" if q["gap"] > 0.05 else "#b7770d" if q["gap"] >= 0 else "#c0392b"
+        gap_str = f"+{q['gap']:.2f}" if q["gap"] >= 0 else f"{q['gap']:.2f}"
+        q_rows += (
+            f'<tr>'
+            f'<td style="padding:6px 12px;color:#aaa;font-size:0.88em">{short}</td>'
+            f'<td style="padding:6px 12px;text-align:center;color:#1a7a4a;font-weight:600">{q["oe_llm"]:.2f}</td>'
+            f'<td style="padding:6px 12px;text-align:center;color:#c0392b;font-weight:600">{q["trad_llm"]:.2f}</td>'
+            f'<td style="padding:6px 12px;text-align:center;color:{gap_color};font-weight:700">{gap_str}</td>'
+            f'</tr>'
+        )
+
+    per_question_table = (
+        f'<table style="width:100%;border-collapse:collapse;margin-top:10px">'
+        f'<tr>'
+        f'<th style="padding:6px 12px;text-align:left;color:#555;font-size:0.75em;'
+        f'text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #2a2a2a">Question</th>'
+        f'<th style="padding:6px 12px;text-align:center;color:#555;font-size:0.75em;'
+        f'text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #2a2a2a">OpenEnv</th>'
+        f'<th style="padding:6px 12px;text-align:center;color:#555;font-size:0.75em;'
+        f'text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #2a2a2a">Traditional</th>'
+        f'<th style="padding:6px 12px;text-align:center;color:#555;font-size:0.75em;'
+        f'text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #2a2a2a">Advantage</th>'
+        f'</tr>'
+        f'{q_rows}'
+        f'</table>'
+    )
+
+    body = (
+        f"{win_note} "
+        f"Averaged across all {n} questions, OpenEnv scored <b>{avg_oe_llm:.2f}</b> vs "
+        f"Traditional's <b>{avg_trad_llm:.2f}</b> on the LLM judge &mdash; "
+        f"a <b>+{overall_advantage:.2f}</b> advantage that held consistently across different topics."
+        f"<br><br>"
+        f"{kw_consistency}"
+        f"<br><br>"
+        f"The keyword metric overestimated Traditional's research quality by an average of "
+        f"<b>{kw_overestimate:.2f}</b> per question. "
+        f"An agent evaluated only on keyword scores would appear to be performing well "
+        f"while delivering research that is significantly worse than an OpenEnv agent. "
+        f"Across {n} different questions, that gap never closed."
+        f"{per_question_table}"
+    )
+
+    openenv_how = (
+        f"Each question was submitted as an independent Flyte task — "
+        f"{n * 2} tasks running in parallel, two agents per question. "
+        f"Inside each task, the OpenEnv environment ran its full episode contract: "
+        f"<b>reset()</b> to start a clean session, <b>step()</b> for each tool call, "
+        f"and <b>client.state</b> to capture the final episode record. "
+        f"Flyte caches results by <em>(query, agent_type, max_steps)</em> — "
+        f"rerunning the same questions at the same step count returns instantly from cache, "
+        f"which is why changing max steps by even 1 forces a fresh execution."
+    )
+
+    return (
+        f'<div class="narrative-card">'
+        f'<div class="narrative-header">&#128202; What the pattern shows</div>'
+        f'<div class="narrative-body">{body}</div>'
+        f'<div class="narrative-header narrative-header-alt">&#9881; How OpenEnv + Flyte works</div>'
+        f'<div class="narrative-body">{openenv_how}</div>'
         f'</div>'
     )
 

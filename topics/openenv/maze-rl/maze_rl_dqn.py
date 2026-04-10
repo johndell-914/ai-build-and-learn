@@ -1,14 +1,24 @@
 """Train a DQN agent to navigate mazes using OpenEnv + Flyte.
 
-Demonstrates that OpenEnv is model-agnostic: same maze environment,
-but trained with a simple DQN (2-layer MLP) instead of an LLM.
-The DQN agent learns fast and visibly improves within minutes.
+DQN (Deep Q-Network) is a reinforcement learning algorithm that learns
+which action to take in each state by estimating future rewards. It uses
+a neural network to approximate Q(state, action) — the expected total
+reward from taking an action in a given state and playing optimally after.
+
+Key components:
+  - Q-Network: Neural net that takes maze state -> outputs Q-value for each action
+  - Target Network: Frozen copy of Q-net, provides stable training targets
+  - Replay Buffer: Stores past experiences, samples random batches to break correlations
+  - Epsilon-Greedy: Balances exploration (random moves) vs exploitation (best known move)
+
+This demo shows OpenEnv is model-agnostic: same maze environment as the
+LLM demo, but trained with a simple neural net instead.
 
 Run locally:
-  flyte run --local maze_rl_dqn.py pipeline --training_steps 20
+  flyte run --local maze_rl_dqn.py pipeline
 
 Run on a cluster:
-  flyte run maze_rl_dqn.py pipeline --training_steps 50 --episodes_per_step 32
+  flyte run maze_rl_dqn.py pipeline --training_steps 80 --episodes_per_step 32
 """
 
 import base64
@@ -31,16 +41,23 @@ from openenv.core.client_types import StepResult
 from openenv.core.env_server import Action, Observation, State
 from pydantic import Field as PydanticField
 
-# ---------------------------------------------------------------------------
-# Models (shared with maze_env server)
-# ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Models — define what the agent can do and what it sees
+# These must match the server-side models in maze_env/models.py
+# ---------------------------------------------------------------------------
 
 class MazeAction(Action):
+    """The agent picks one of 4 directions each step."""
     direction: str = "RIGHT"
 
 
 class MazeObservation(Observation):
+    """What the environment returns after each step:
+    - grid: 2D array of the maze ('#'=wall, '.'=path, 'A'=agent, 'E'=exit)
+    - agent_pos/exit_pos: (row, col) coordinates
+    - steps_taken: how many moves so far this episode
+    """
     grid: list[list[str]] = PydanticField(default_factory=list)
     agent_pos: tuple[int, int] = (1, 1)
     exit_pos: tuple[int, int] = (5, 5)
@@ -48,17 +65,20 @@ class MazeObservation(Observation):
 
 
 class MazeState(State):
+    """Episode metadata — the maze seed lets us replay the same maze."""
     maze_seed: int = 0
     optimal_path_length: int = 0
 
 
 # ---------------------------------------------------------------------------
-# Client
+# Client — connects to the OpenEnv server via WebSocket
+# Three methods translate between our typed models and the server's JSON.
+# This is the same pattern for ANY OpenEnv environment.
 # ---------------------------------------------------------------------------
-
 
 class MazeEnv(EnvClient[MazeAction, MazeObservation, MazeState]):
     def _step_payload(self, action: MazeAction) -> dict:
+        """Convert our action object to JSON for the server."""
         return {"direction": action.direction}
 
     def _parse_result(self, payload: dict) -> StepResult[MazeObservation]:
@@ -108,7 +128,8 @@ env = flyte.TaskEnvironment(
 DIRECTIONS = ["UP", "DOWN", "LEFT", "RIGHT"]
 GRID_SIZE = 12
 
-# Map grid characters to numeric values for the neural net
+# Map grid characters to numeric values for the neural net.
+# The network can't read characters — it needs numbers.
 CELL_MAP = {"#": 0.0, ".": 1.0, "A": 2.0, "E": 3.0}
 
 
@@ -162,16 +183,20 @@ def fig_to_html(fig) -> str:
 
 
 def grid_to_tensor(grid, agent_pos, exit_pos, device):
-    """Convert maze grid + positions into a flat tensor for the DQN."""
+    """Convert the maze observation into a flat tensor the neural net can process.
+
+    The grid is flattened to numbers (wall=0, path=1, agent=2, exit=3),
+    then we append the agent and exit positions normalized to [0, 1].
+    This gives the network everything it needs: the maze layout + where things are.
+    """
     import torch
 
-    # Flatten grid to numeric values
     flat = []
     for row in grid:
         for cell in row:
             flat.append(CELL_MAP.get(cell, 1.0))
 
-    # Add normalized agent and exit positions
+    # Normalized positions help the network understand spatial relationships
     flat.extend([
         agent_pos[0] / GRID_SIZE,
         agent_pos[1] / GRID_SIZE,
@@ -182,17 +207,20 @@ def grid_to_tensor(grid, agent_pos, exit_pos, device):
     return torch.tensor(flat, dtype=torch.float32, device=device).unsqueeze(0)
 
 
-# State size: 12x12 grid + 4 position features
+# Input: 12x12 grid (144 values) + 4 position features = 148 numbers
+# Output: 4 Q-values, one per direction (UP, DOWN, LEFT, RIGHT)
 STATE_SIZE = GRID_SIZE * GRID_SIZE + 4
 ACTION_SIZE = 4
 
 
 # ---------------------------------------------------------------------------
-# Co-located env server
+# Co-located env server — starts inside each Flyte task
+# This means zero network overhead: the env runs in the same process.
+# On a cluster, each task gets its own container with its own env server.
 # ---------------------------------------------------------------------------
 
-
 def start_env_server(port: int = 8000):
+    """Start the maze OpenEnv server in a background thread."""
     import uvicorn
     from openenv.core.env_server import create_app
     from maze_env.models import MazeAction as MA, MazeObservation as MO
@@ -212,6 +240,8 @@ def start_env_server(port: int = 8000):
 
 
 def create_client(port: int = 8000):
+    """Create a sync client connected to the env server.
+    The .sync() wrapper lets us call reset/step/state without await."""
     async_client = MazeEnv(
         base_url=f"http://localhost:{port}",
         connect_timeout_s=30.0,
@@ -226,9 +256,16 @@ def create_client(port: int = 8000):
 # DQN Model
 # ---------------------------------------------------------------------------
 
-
 def build_dqn(device):
-    """3-layer MLP for Q-value estimation."""
+    """Build the Q-network: a 3-layer MLP.
+
+    Input:  148 numbers (maze grid + positions)
+    Output: 4 Q-values (one per direction)
+
+    The network learns to predict "how much total future reward will I
+    get if I go UP/DOWN/LEFT/RIGHT from this state?" The agent then
+    picks the direction with the highest Q-value.
+    """
     import torch.nn as nn
 
     model = nn.Sequential(
@@ -238,24 +275,30 @@ def build_dqn(device):
         nn.ReLU(),
         nn.Linear(256, 128),
         nn.ReLU(),
-        nn.Linear(128, ACTION_SIZE),
+        nn.Linear(128, ACTION_SIZE),  # 4 outputs: Q(UP), Q(DOWN), Q(LEFT), Q(RIGHT)
     ).to(device)
     return model
 
 
 # ---------------------------------------------------------------------------
-# Replay Buffer
+# Replay Buffer — stores past experiences for training
+#
+# Why not just train on the latest episode? Because consecutive steps
+# are highly correlated (step 5 looks a lot like step 6). Training on
+# correlated data makes neural nets unstable. The replay buffer lets us
+# sample random batches from ALL past experience, breaking the correlation.
 # ---------------------------------------------------------------------------
-
 
 class ReplayBuffer:
     def __init__(self, capacity: int = 10000):
-        self.buffer = deque(maxlen=capacity)
+        self.buffer = deque(maxlen=capacity)  # Old experiences drop off when full
 
     def push(self, state, action, reward, next_state, done):
+        """Store one transition: (state, action, reward, next_state, done)."""
         self.buffer.append((state, action, reward, next_state, done))
 
     def sample(self, batch_size: int):
+        """Sample a random batch for training."""
         return random.sample(self.buffer, min(batch_size, len(self.buffer)))
 
     def __len__(self):
@@ -265,7 +308,6 @@ class ReplayBuffer:
 # ---------------------------------------------------------------------------
 # Episode playing
 # ---------------------------------------------------------------------------
-
 
 def play_episode(client, model, device, epsilon=0.1, record=False, maze_seed=None):
     """Play one maze episode with epsilon-greedy DQN policy.
@@ -295,13 +337,16 @@ def play_episode(client, model, device, epsilon=0.1, record=False, maze_seed=Non
 
     step_num = 0
     while not result.done and step_num < 200:
-        # Epsilon-greedy action selection
+        # Epsilon-greedy: with probability epsilon, take a random action
+        # (explore), otherwise take the action with the highest Q-value (exploit).
+        # Early in training epsilon is high (~1.0) so we explore a lot.
+        # Later it decays to ~0.05 so we mostly use what we learned.
         if random.random() < epsilon:
             action_idx = random.randint(0, ACTION_SIZE - 1)
         else:
             with torch.no_grad():
-                q_values = model(state)
-                action_idx = q_values.argmax(dim=1).item()
+                q_values = model(state)  # Get Q-value for each direction
+                action_idx = q_values.argmax(dim=1).item()  # Pick the best one
 
         direction = DIRECTIONS[action_idx]
         result = client.step(MazeAction(direction=direction))
@@ -314,6 +359,7 @@ def play_episode(client, model, device, epsilon=0.1, record=False, maze_seed=Non
         next_state = grid_to_tensor(obs.grid, obs.agent_pos, obs.exit_pos, device)
         done = result.done
 
+        # Store this transition — the replay buffer will use it for training later
         transitions.append((state, action_idx, reward, next_state, done))
         state = next_state
 
@@ -394,7 +440,6 @@ def play_episode_baseline(client, policy="random", maze_seed=None):
 # ---------------------------------------------------------------------------
 # HTML Replay Generator
 # ---------------------------------------------------------------------------
-
 
 def generate_replay_html(recordings: list[EpisodeRecording], title: str = "Maze Replay") -> str:
     CELL_COLORS = {
@@ -535,9 +580,8 @@ def generate_replay_html(recordings: list[EpisodeRecording], title: str = "Maze 
 
 
 # ---------------------------------------------------------------------------
-# Flyte tasks
+# Pipeline tasks 
 # ---------------------------------------------------------------------------
-
 
 @env.task
 async def eval_baselines(num_episodes: int = 50, maze_seed: int | None = None) -> str:
@@ -602,7 +646,16 @@ async def train_dqn(
     replay_capacity: int = 100000,
     maze_seed: int | None = None,
 ) -> tuple[File, str]:
-    """Full DQN training loop with live report updates."""
+    """Full DQN training loop with live report updates.
+
+    Training loop:
+      1. Play episodes with epsilon-greedy policy, store transitions in replay buffer
+      2. Sample random batches from replay buffer
+      3. Compute Q-values from q_net, target Q-values from target_net
+      4. Update q_net to minimize the difference (Bellman error)
+      5. Periodically copy q_net weights to target_net
+      6. Decay epsilon so the agent explores less over time
+    """
     import torch
     import torch.nn.functional as F
     import matplotlib
@@ -614,6 +667,9 @@ async def train_dqn(
     device = get_device()
     print(f"  Device: {device}")
 
+    # Two networks: q_net learns continuously, target_net is a frozen copy
+    # that gets updated every target_update_freq steps. This prevents the
+    # "moving target" problem where the network chases its own predictions.
     q_net = build_dqn(device)
     target_net = build_dqn(device)
     target_net.load_state_dict(q_net.state_dict())
@@ -701,7 +757,8 @@ async def train_dqn(
             step_rewards.append(total_reward)
             step_solved.append(solved)
 
-        # Train on replay buffer — 32 gradient updates per step
+        # Train on replay buffer — sample random batches and update Q-network.
+        # Multiple updates per step lets us extract more learning from collected data.
         total_loss = 0.0
         num_updates = min(len(replay) // batch_size, 32)
 
@@ -713,21 +770,28 @@ async def train_dqn(
             next_states = torch.cat([ns for _, _, _, ns, _ in batch])
             dones = torch.tensor([d for _, _, _, _, d in batch], dtype=torch.float32, device=device)
 
+            # What did the Q-net predict for the actions we actually took?
             q_values = q_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
 
-            # Double DQN: q_net selects, target_net evaluates
+            # What SHOULD the Q-values be? (Bellman equation)
+            # Double DQN trick: q_net picks the best next action,
+            # but target_net estimates its value. This prevents overestimation.
             with torch.no_grad():
                 best_actions = q_net(next_states).argmax(dim=1)
                 next_q = target_net(next_states).gather(1, best_actions.unsqueeze(1)).squeeze(1)
+                # target = reward + discounted future value (0 if episode is done)
                 target = rewards_t + gamma * next_q * (1 - dones)
 
+            # Minimize the gap between predicted and target Q-values
+            # Smooth L1 (Huber) loss is less sensitive to outliers than MSE
             loss = F.smooth_l1_loss(q_values, target)
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(q_net.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(q_net.parameters(), 1.0)  # Prevent exploding gradients
             optimizer.step()
             total_loss += loss.item()
 
+        # Periodically sync target network with the latest q_net weights
         if step % target_update_freq == 0:
             target_net.load_state_dict(q_net.state_dict())
 
@@ -820,9 +884,8 @@ def _evaluate(client, model, device, num_episodes, record_best=False, maze_seed=
 
 
 # ---------------------------------------------------------------------------
-# Pipeline
+# Pipeline (putting the tasks together)
 # ---------------------------------------------------------------------------
-
 
 @env.task(report=True)
 async def pipeline(
@@ -956,6 +1019,8 @@ async def pipeline(
     replay_html = generate_replay_html(replay_recs, title="Maze Replays — DQN Agent")
 
     final = eval_results[-1]
+    best_eval = max(eval_results, key=lambda e: (e["solve_rate"], e["avg_reward"]))
+    peak_train = max(train_metrics, key=lambda m: m["solve_rate"])
     await flyte.report.replace.aio(
         f"<h2>Maze RL Training Report — DQN</h2>"
         f"<h3>Results</h3>"
@@ -967,12 +1032,19 @@ async def pipeline(
         f"<tr><td>Wall-follower</td><td>{baselines['wall_follower']['solve_rate']:.2f}</td>"
         f"<td>{baselines['wall_follower']['avg_steps']:.0f}</td>"
         f"<td>{baselines['wall_follower']['avg_reward']:.2f}</td></tr>"
-        f"<tr><td><b>DQN (untrained)</b></td><td>{eval_results[0]['solve_rate']:.2f}</td>"
+        f"<tr><td>DQN (untrained)</td><td>{eval_results[0]['solve_rate']:.2f}</td>"
         f"<td>{eval_results[0]['avg_steps']:.0f}</td>"
         f"<td>{eval_results[0]['avg_reward']:.2f}</td></tr>"
-        f"<tr><td><b>DQN (final)</b></td><td><b>{final['solve_rate']:.2f}</b></td>"
-        f"<td><b>{final['avg_steps']:.0f}</b></td>"
-        f"<td><b>{final['avg_reward']:.2f}</b></td></tr>"
+        f"<tr><td>DQN (final, step {final['step']})</td><td>{final['solve_rate']:.2f}</td>"
+        f"<td>{final['avg_steps']:.0f}</td>"
+        f"<td>{final['avg_reward']:.2f}</td></tr>"
+        f"<tr style='background:#1a3a1a;'><td><b>DQN (best eval, step {best_eval['step']})</b></td>"
+        f"<td><b>{best_eval['solve_rate']:.2f}</b></td>"
+        f"<td><b>{best_eval['avg_steps']:.0f}</b></td>"
+        f"<td><b>{best_eval['avg_reward']:.2f}</b></td></tr>"
+        f"<tr><td><i>Peak training solve rate</i></td>"
+        f"<td><i>{peak_train['solve_rate']:.2f} (step {peak_train['step']})</i></td>"
+        f"<td colspan='2'><i>eps={peak_train['epsilon']:.2f}</i></td></tr>"
         f"</table>"
         f"<h3>Training Progress</h3>{charts_html}"
         f"<h3>Visual Replay</h3>{replay_html}"
@@ -992,9 +1064,9 @@ async def pipeline(
     await flyte.report.flush.aio()
 
     summary = (
-        f"DQN final solve_rate: {final['solve_rate']:.2f} "
-        f"(random: {baselines['random']['solve_rate']:.2f}, "
-        f"wall-follower: {baselines['wall_follower']['solve_rate']:.2f})"
+        f"DQN best solve_rate: {best_eval['solve_rate']:.2f} (step {best_eval['step']}) "
+        f"| final: {final['solve_rate']:.2f} "
+        f"| peak train: {peak_train['solve_rate']:.2f} (step {peak_train['step']})"
     )
     print(f"\n{summary}")
 

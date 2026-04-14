@@ -1,0 +1,6 @@
+vllm==0.18.*
+vllm-omni==0.18.*
+mistral-common>=1.10.0
+httpx
+soundfile
+gradio>=5.50

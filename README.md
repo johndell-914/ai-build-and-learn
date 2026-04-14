@@ -2,9 +2,9 @@
 
 Welcome to AI Build & Learn, a weekly AI engineering stream where we pick a new topic and learn by building together.
 
-> **Up next: Reinforcement Learning with OpenEnv** (2026-04-10)
-> An e2e framework for creating, deploying and using isolated execution environments for agentic RL training.
-> [RSVP](https://luma.com/viuebg7e) | [Join the Slack](https://slack.flyte.org/)
+> **Up next: AutoResearch** (2026-04-17)
+> Andrej Karpathy's AutoResearch concept — give an AI agent a small but real LLM training setup and let it experiment autonomously overnight.
+> [RSVP](https://luma.com/sprsr7vv) | [Join the Slack](https://slack.flyte.org/)
 
 ## Upcoming:
 
@@ -18,23 +18,33 @@ Welcome to AI Build & Learn, a weekly AI engineering stream where we pick a new 
 <tbody>
 <tr><td>
       <div style="padding: 8px 0;">
-        <div style="font-size: 16px; line-height: 1.3; margin-bottom: 6px;"><strong>Reinforcement Learning with OpenEnv</strong></div>
-        <div style="color: #666; font-size: 13px; margin-bottom: 4px;">2026-04-10</div>
-        <div style="font-size: 13px; color: #666;">
-          <a href="topics/openenv">code</a> • <a href="https://luma.com/viuebg7e">register</a>
-        </div>
-      </div>
-    </td><td><div style="padding: 8px 0; line-height: 1.5;">An e2e framework for creating, deploying and using isolated execution environments for agentic RL training, built using Gymnasium style simple APIs
-</div></td></tr>
-<tr><td>
-      <div style="padding: 8px 0;">
         <div style="font-size: 16px; line-height: 1.3; margin-bottom: 6px;"><strong>AutoResearch</strong></div>
         <div style="color: #666; font-size: 13px; margin-bottom: 4px;">2026-04-17</div>
         <div style="font-size: 13px; color: #666;">
-          <a href="https://luma.com/sprsr7vv">register</a>
+          <a href="topics/autoresearch">code</a> • <a href="https://luma.com/sprsr7vv">register</a>
         </div>
       </div>
     </td><td><div style="padding: 8px 0; line-height: 1.5;">Andrej Karpathy's AutoResearch concept — give an AI agent a small but real LLM training setup and let it experiment autonomously overnight.
+</div></td></tr>
+<tr><td>
+      <div style="padding: 8px 0;">
+        <div style="font-size: 16px; line-height: 1.3; margin-bottom: 6px;"><strong>Gemma 4</strong></div>
+        <div style="color: #666; font-size: 13px; margin-bottom: 4px;">2026-04-24</div>
+        <div style="font-size: 13px; color: #666;">
+          <a href="topics/gemma4">code</a> • <a href="https://luma.com/0j0wzgaz">register</a>
+        </div>
+      </div>
+    </td><td><div style="padding: 8px 0; line-height: 1.5;">Build with Google's newly released Gemma 4 models — different sizes across chat, agents, and visual understanding.
+</div></td></tr>
+<tr><td>
+      <div style="padding: 8px 0;">
+        <div style="font-size: 16px; line-height: 1.3; margin-bottom: 6px;"><strong>Vector Stores</strong></div>
+        <div style="color: #666; font-size: 13px; margin-bottom: 4px;">2026-05-01</div>
+        <div style="font-size: 13px; color: #666;">
+          <a href="topics/vectorstore">code</a> • <a href="https://luma.com/00mp6be2">register</a>
+        </div>
+      </div>
+    </td><td><div style="padding: 8px 0; line-height: 1.5;">Embeddings and vector stores — how semantic search actually works under the hood and how to build RAG pipelines on top.
 </div></td></tr>
 </tbody>
 </table>
@@ -51,10 +61,20 @@ Welcome to AI Build & Learn, a weekly AI engineering stream where we pick a new 
 <tbody>
 <tr><td>
       <div style="padding: 8px 0;">
+        <div style="font-size: 16px; line-height: 1.3; margin-bottom: 6px;"><strong>Reinforcement Learning with OpenEnv</strong></div>
+        <div style="color: #666; font-size: 13px; margin-bottom: 4px;">2026-04-10</div>
+        <div style="font-size: 13px; color: #666;">
+          <a href="topics/openenv">code</a> • <a href="https://www.youtube.com/watch?v=VUb16HYIyl4">watch</a>
+        </div>
+      </div>
+    </td><td><div style="padding: 8px 0; line-height: 1.5;">An e2e framework for creating, deploying and using isolated execution environments for agentic RL training, built using Gymnasium style simple APIs.
+</div></td></tr>
+<tr><td>
+      <div style="padding: 8px 0;">
         <div style="font-size: 16px; line-height: 1.3; margin-bottom: 6px;"><strong>Agentic Search with Tavily</strong></div>
         <div style="color: #666; font-size: 13px; margin-bottom: 4px;">2026-04-03</div>
         <div style="font-size: 13px; color: #666;">
-          <a href="topics/tavily">code</a>
+          <a href="topics/tavily">code</a> • <a href="https://www.youtube.com/watch?v=WqdhxthHL04">watch</a>
         </div>
       </div>
     </td><td><div style="padding: 8px 0; line-height: 1.5;">Tavily is a search API often used by AI agents. Learn how to integrate Tavily search into your AI applications.

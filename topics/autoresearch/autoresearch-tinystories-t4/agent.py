@@ -117,12 +117,16 @@ def _find_section(response: str, marker: str) -> int:
     """
     Find the position of a section marker in the response, case-insensitively.
 
-    Handles variations like "REASONING:", "1. REASONING:", "**REASONING:**".
-    Returns the index just after the marker, or -1 if not found.
+    Handles variations:
+      - "REASONING:" / "NEW_TRAIN_PY:"
+      - "## REASONING" / "## NEW_TRAIN_PY"  (markdown headings)
+      - "1. REASONING:" / "**REASONING:**"  (numbered or bold)
+    Returns the index just after the matched marker, or -1 if not found.
     """
     import re
+    word = marker.rstrip(":")
     pattern = re.compile(
-        r"(?:^\s*(?:\d+\.\s+)?(?:\*{1,2})?)" + re.escape(marker) + r"(?:\*{1,2})?",
+        r"^[ \t]*(?:#{1,3}\s+|\d+\.\s+|\*{1,2})?" + re.escape(word) + r"(?:\*{1,2})?:?[ \t]*$",
         re.IGNORECASE | re.MULTILINE,
     )
     match = pattern.search(response)

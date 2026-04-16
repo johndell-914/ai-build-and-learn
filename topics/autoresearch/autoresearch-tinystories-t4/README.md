@@ -172,14 +172,14 @@ Standard PyTorch attention — no custom kernel, fully compatible with T4 and an
 
 ### Summary of changes
 
-| Change | Original (H100) | This repo (T4) | Reason |
-|--------|----------------|----------------|--------|
-| Attention | FA3 custom kernel | `F.scaled_dot_product_attention` | FA3 requires compute cap 9.0 |
-| `DEVICE_BATCH_SIZE` | 128 | 16 | VRAM limit |
-| `TOTAL_BATCH_SIZE` | 2\*\*19 (524K) | 2\*\*17 (131K) | Gradient accum steps for 5-min budget |
-| `WINDOW_PATTERN` | "SSSL" | "LLLL" | Sliding window requires FA3 kernel |
-| Dataset | climbmix-400b | TinyStories | Download size and run budget |
-| Optimizer | MuonAdamW | AdamW | Availability and simplicity |
+| What changed | H100 original | T4 adaptation | Why |
+|---|---|---|---|
+| Attention kernel | Flash Attention 3 (custom) | `F.scaled_dot_product_attention` | FA3 requires compute capability 9.0; T4 is 7.5 |
+| `DEVICE_BATCH_SIZE` | 128 | 16 | T4 has 16GB VRAM vs H100 80GB |
+| `TOTAL_BATCH_SIZE` | 2²⁰ (524K tokens) | 2¹⁷ (131K tokens) | Keeps gradient accumulation steps manageable in 5 min |
+| `WINDOW_PATTERN` | `"SSSL"` (sliding window) | `"LLLL"` (full attention) | Sliding window requires FA3 kernel |
+| Dataset | climbmix-400b (400B tokens) | TinyStories (~2GB) | Fast download, strong signal in 5-minute runs |
+| Optimizer | MuonAdamW (custom) | AdamW (standard) | MuonAdamW not available as a package |
 
 ---
 
@@ -205,18 +205,6 @@ Local Machine
         └── Renders val_bpb progression chart
         └── Shows experiment log
 ```
-
----
-
-## Key adaptations from Karpathy's original (H100 → T4)
-
-| Parameter | H100 Original | T4 Adaptation |
-|-----------|--------------|---------------|
-| Flash Attention | FA3 custom kernel | `F.scaled_dot_product_attention` |
-| `DEVICE_BATCH_SIZE` | 128 | 16 |
-| `TOTAL_BATCH_SIZE` | 2\*\*19 | 2\*\*17 |
-| `WINDOW_PATTERN` | "SSSL" | "LLLL" |
-| Dataset | climbmix-400b (400B tokens) | TinyStories (~2GB) |
 
 ---
 

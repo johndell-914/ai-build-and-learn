@@ -237,6 +237,21 @@ body, .gradio-container {
 .diff-header { color: #444; }
 
 
+/* ── Tooltip ─────────────────────────────────────────────────────────────── */
+
+.tooltip-icon {
+    font-size: 11px;
+    color: #555;
+    cursor: help;
+    vertical-align: super;
+    margin-left: 4px;
+}
+
+.tooltip-icon:hover {
+    color: #888;
+}
+
+
 /* ── Run selector ────────────────────────────────────────────────────────── */
 
 #run-selector label span {

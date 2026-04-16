@@ -184,7 +184,9 @@ def val_bpb_chart(experiments: list[dict]) -> go.Figure:
     )
 
     fig.update_layout(
-        title="val_bpb Progression",
+        title=dict(
+            text='val_bpb Progression <span class="tooltip-icon" title="Validation bits per byte — how many bits the model needs to predict each byte of unseen text. Lower is better. Improvement threshold: 0.001">ℹ</span>',
+        ),
         xaxis=dict(title="Experiment #", **_AXIS),
         yaxis=dict(title="val_bpb (lower = better)", **_AXIS),
         **_CHART_LAYOUT,

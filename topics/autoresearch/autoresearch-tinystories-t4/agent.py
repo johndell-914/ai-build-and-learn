@@ -111,26 +111,47 @@ def _compute_diff(before: str, after: str) -> str:
     return "".join(diff)
 
 
+def _find_section(response: str, marker: str) -> int:
+    """
+    Find the position of a section marker in the response, case-insensitively.
+
+    Handles variations like "REASONING:", "1. REASONING:", "**REASONING:**".
+    Returns the index just after the marker, or -1 if not found.
+    """
+    import re
+    pattern = re.compile(
+        r"(?:^\s*(?:\d+\.\s+)?(?:\*{1,2})?)" + re.escape(marker) + r"(?:\*{1,2})?",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    match = pattern.search(response)
+    if match:
+        return match.end()
+    return -1
+
+
 def _parse_llm_response(response: str) -> tuple[str, str]:
     """
     Extract REASONING and NEW_TRAIN_PY from Claude's response.
 
+    Handles variations like "1. REASONING:", "**NEW_TRAIN_PY:**", etc.
+
     Returns:
         (reasoning, new_train_py) — both as strings.
     Raises:
-        ValueError if the expected sections are not found.
+        ValueError if NEW_TRAIN_PY section is not found.
     """
     reasoning = ""
     new_train_py = ""
 
-    if "REASONING:" in response:
-        reasoning_start = response.index("REASONING:") + len("REASONING:")
-        reasoning_end = response.index("NEW_TRAIN_PY:") if "NEW_TRAIN_PY:" in response else len(response)
-        reasoning = response[reasoning_start:reasoning_end].strip()
+    reasoning_pos = _find_section(response, "REASONING:")
+    new_train_pos = _find_section(response, "NEW_TRAIN_PY:")
 
-    if "NEW_TRAIN_PY:" in response:
-        code_start = response.index("NEW_TRAIN_PY:") + len("NEW_TRAIN_PY:")
-        code_block = response[code_start:].strip()
+    if reasoning_pos != -1:
+        end = new_train_pos if new_train_pos != -1 else len(response)
+        reasoning = response[reasoning_pos:end].strip()
+
+    if new_train_pos != -1:
+        code_block = response[new_train_pos:].strip()
         # Strip markdown code fences if present
         if code_block.startswith("```"):
             code_block = code_block.split("\n", 1)[1]
@@ -277,6 +298,7 @@ def run() -> None:
             reasoning, new_train_py = _parse_llm_response(response_text)
         except ValueError as e:
             print(f"Parse error: {e}. Skipping experiment.")
+            print(f"--- Claude response (first 500 chars) ---\n{response_text[:500]}\n---")
             continue
 
         print(f"Change proposed: {reasoning[:200]}")

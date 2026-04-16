@@ -29,6 +29,7 @@ from pathlib import Path
 
 import anthropic
 
+import checkpoint
 import firestore_logger
 import metrics
 
@@ -223,17 +224,29 @@ def run() -> None:
     print(f"Run started: {run_id}")
 
     deadline = time.time() + RUN_SECONDS
-    experiment_number = 0
-    experiment_history: list[dict] = []
 
-    # Measure baseline val_bpb before any changes
-    print("Measuring baseline val_bpb...")
-    baseline_output, _ = _run_training()
-    current_val_bpb = metrics.parse_val_bpb(baseline_output)
-    if current_val_bpb is None:
-        print("ERROR: Could not parse baseline val_bpb. Check that train.py runs correctly.")
-        return
-    print(f"Baseline val_bpb={current_val_bpb:.6f}")
+    # Resume from checkpoint if one exists (e.g. after a crash)
+    prior = checkpoint.load()
+    if prior is not None:
+        print(f"Resuming from checkpoint saved at {prior['saved_at']}")
+        print(f"  experiment_number={prior['experiment_number']}  val_bpb={prior['current_val_bpb']:.6f}")
+        current_val_bpb = prior["current_val_bpb"]
+        experiment_number = prior["experiment_number"]
+        experiment_history = prior["experiment_history"]
+        # Reuse same Firestore run if available, otherwise start a new one
+        if run_id is None and prior.get("run_id"):
+            run_id = prior["run_id"]
+    else:
+        experiment_number = 0
+        experiment_history = []
+        # Measure baseline val_bpb before any changes
+        print("Measuring baseline val_bpb...")
+        baseline_output, _ = _run_training()
+        current_val_bpb = metrics.parse_val_bpb(baseline_output)
+        if current_val_bpb is None:
+            print("ERROR: Could not parse baseline val_bpb. Check that train.py runs correctly.")
+            return
+        print(f"Baseline val_bpb={current_val_bpb:.6f}")
 
     while time.time() < deadline:
         experiment_number += 1
@@ -320,6 +333,7 @@ def run() -> None:
             except Exception as e:
                 print(f"WARNING: Firestore log_experiment failed: {e}. Continuing.")
         experiment_history.append(exp_record)
+        checkpoint.save(run_id, current_val_bpb, experiment_number, experiment_history)
 
     # Close the run
     if run_id is not None:
@@ -327,6 +341,7 @@ def run() -> None:
             firestore_logger.close_run(run_id, experiment_number, project_id=gcp_project)
         except Exception as e:
             print(f"WARNING: Firestore close_run failed: {e}.")
+    checkpoint.clear()
     print(f"\nRun complete. {experiment_number} experiments. Final val_bpb={current_val_bpb:.6f}")
     print(f"Run ID: {run_id}")
 

@@ -10,16 +10,20 @@ Reads experiment data from Firestore and renders:
 Auto-refreshes every 60 seconds so it stays live during an active run.
 
 Usage (local machine):
-    export GOOGLE_APPLICATION_CREDENTIALS="path/to/autoresearch-reader-key.json"
-    export GCP_PROJECT="your-gcp-project-id"
     python dashboard/app.py
 
+Reads GCP_PROJECT and FIRESTORE_DATABASE from .env in the project root.
 Then open http://localhost:7860 in your browser.
 """
 
 import os
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load .env from the project root (one level up from dashboard/)
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 import gradio as gr
 

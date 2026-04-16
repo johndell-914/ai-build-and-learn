@@ -470,18 +470,22 @@ python3 agent.py
 
 ### Authenticate locally
 ```bash
-gcloud auth application-default login
+gcloud auth application-default login --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/userinfo.email,openid
 ```
 
-### Set environment variables
-```bash
-export GCP_PROJECT=your-project-id
-export FIRESTORE_DATABASE=your-database-name
+### Create a local .env file
+The dashboard reads `GCP_PROJECT` and `FIRESTORE_DATABASE` from the `.env` file in the project root — the same file used by `agent.py`. If you already created it for the T4, copy the relevant values locally:
+
 ```
+GCP_PROJECT=your-gcp-project-id
+FIRESTORE_DATABASE=your-firestore-database-name
+```
+
+No need to set environment variables manually.
 
 ### Install dashboard dependencies
 ```bash
-pip install gradio plotly google-cloud-firestore
+pip install gradio plotly google-cloud-firestore python-dotenv
 ```
 
 ### Run the dashboard

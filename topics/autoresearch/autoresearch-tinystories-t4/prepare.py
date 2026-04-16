@@ -7,7 +7,7 @@ This version uses roneneldan/TinyStories (~2GB, suitable for T4 5-minute runs).
 
 Responsibilities:
   - Download TinyStories from HuggingFace
-  - Tokenize using a simple character-level or BPE tokenizer
+  - Tokenize using a simple character-level tokenizer
   - Write train.bin and val.bin to the data/ directory
   - Write tokenizer metadata (vocab_size) to data/meta.json
 
@@ -19,6 +19,7 @@ Static file — AutoResearch never modifies this.
 
 import json
 import os
+import struct
 import numpy as np
 from datasets import load_dataset
 
@@ -27,27 +28,42 @@ from datasets import load_dataset
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 DATASET_NAME = "roneneldan/TinyStories"
 VAL_SPLIT_RATIO = 0.1        # 10% of data for validation
-VOCAB_SIZE = 8192             # matches train.py expectation
+CHUNK_SIZE = 10_000          # encode this many stories at a time to avoid OOM
+
 
 # ── Tokenizer ─────────────────────────────────────────────────────────────────
 
-def _build_tokenizer(texts: list[str]) -> tuple[dict, dict]:
+def _build_tokenizer(dataset) -> tuple[dict, dict]:
     """
-    Build a simple character-level tokenizer from a list of texts.
+    Build a character-level tokenizer by scanning a sample of stories.
+
+    Scans the first 50,000 stories to collect the character vocabulary —
+    sufficient for TinyStories which uses simple ASCII English.
 
     Returns:
         stoi : str -> int mapping
         itos : int -> str mapping
     """
-    chars = sorted(set("".join(texts)))
+    print("Scanning vocabulary from first 50,000 stories...")
+    chars = set()
+    for i, text in enumerate(dataset["text"]):
+        chars.update(text)
+        if i >= 50_000:
+            break
+    chars = sorted(chars)
     stoi = {ch: i for i, ch in enumerate(chars)}
     itos = {i: ch for ch, i in stoi.items()}
     return stoi, itos
 
 
-def _encode(text: str, stoi: dict) -> list[int]:
-    """Encode a string to a list of token IDs, skipping unknown characters."""
-    return [stoi[ch] for ch in text if ch in stoi]
+def _encode(text: str, stoi: dict) -> bytes:
+    """
+    Encode a string to packed uint16 bytes, skipping unknown characters.
+
+    Returns raw bytes ready to write directly to a binary file.
+    """
+    ids = [stoi[ch] for ch in text if ch in stoi]
+    return struct.pack(f"{len(ids)}H", *ids)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -56,9 +72,12 @@ def prepare() -> None:
     """
     Download TinyStories, tokenize, and write train.bin / val.bin.
 
+    Encodes in chunks of CHUNK_SIZE stories to avoid loading all token IDs
+    into memory at once. Writes directly to binary files as it goes.
+
     Output files:
-        data/train.bin  — uint16 array of training token IDs
-        data/val.bin    — uint16 array of validation token IDs
+        data/train.bin  — uint16 binary array of training token IDs
+        data/val.bin    — uint16 binary array of validation token IDs
         data/meta.json  — tokenizer metadata (vocab_size, stoi, itos)
     """
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -70,48 +89,58 @@ def prepare() -> None:
     total = len(texts)
     split_idx = int(total * (1 - VAL_SPLIT_RATIO))
 
-    train_texts = texts[:split_idx]
-    val_texts = texts[split_idx:]
+    print(f"Total stories: {total:,} | Train: {split_idx:,} | Val: {total - split_idx:,}")
 
-    print(f"Building tokenizer on {len(train_texts):,} training stories...")
-    stoi, itos = _build_tokenizer(train_texts)
+    # Build tokenizer from a sample (avoids loading all text into memory)
+    stoi, itos = _build_tokenizer(dataset)
     actual_vocab_size = len(stoi)
     print(f"Vocabulary size: {actual_vocab_size}")
-
-    print("Encoding training split...")
-    train_ids = []
-    for text in train_texts:
-        train_ids.extend(_encode(text, stoi))
-
-    print("Encoding validation split...")
-    val_ids = []
-    for text in val_texts:
-        val_ids.extend(_encode(text, stoi))
-
-    train_arr = np.array(train_ids, dtype=np.uint16)
-    val_arr = np.array(val_ids, dtype=np.uint16)
 
     train_path = os.path.join(DATA_DIR, "train.bin")
     val_path = os.path.join(DATA_DIR, "val.bin")
     meta_path = os.path.join(DATA_DIR, "meta.json")
 
-    train_arr.tofile(train_path)
-    val_arr.tofile(val_path)
+    # Encode and write training split in chunks
+    print("Encoding training split...")
+    train_tokens = 0
+    with open(train_path, "wb") as f:
+        for start in range(0, split_idx, CHUNK_SIZE):
+            end = min(start + CHUNK_SIZE, split_idx)
+            for text in texts[start:end]:
+                chunk_bytes = _encode(text, stoi)
+                f.write(chunk_bytes)
+                train_tokens += len(chunk_bytes) // 2
+            print(f"  train: {end:,}/{split_idx:,} stories encoded ({train_tokens:,} tokens)", end="\r")
+    print()
 
+    # Encode and write validation split in chunks
+    print("Encoding validation split...")
+    val_tokens = 0
+    with open(val_path, "wb") as f:
+        for start in range(split_idx, total, CHUNK_SIZE):
+            end = min(start + CHUNK_SIZE, total)
+            for text in texts[start:end]:
+                chunk_bytes = _encode(text, stoi)
+                f.write(chunk_bytes)
+                val_tokens += len(chunk_bytes) // 2
+            print(f"  val: {end - split_idx:,}/{total - split_idx:,} stories encoded", end="\r")
+    print()
+
+    # Write metadata
     meta = {
         "vocab_size": actual_vocab_size,
         "stoi": stoi,
-        "itos": {str(k): v for k, v in itos.items()},  # JSON requires string keys
+        "itos": {str(k): v for k, v in itos.items()},
         "dataset": DATASET_NAME,
-        "train_tokens": len(train_ids),
-        "val_tokens": len(val_ids),
+        "train_tokens": train_tokens,
+        "val_tokens": val_tokens,
     }
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
 
     print(f"Done.")
-    print(f"  train.bin : {len(train_ids):,} tokens → {train_path}")
-    print(f"  val.bin   : {len(val_ids):,} tokens → {val_path}")
+    print(f"  train.bin : {train_tokens:,} tokens → {train_path}")
+    print(f"  val.bin   : {val_tokens:,} tokens → {val_path}")
     print(f"  meta.json : vocab_size={actual_vocab_size} → {meta_path}")
 
 

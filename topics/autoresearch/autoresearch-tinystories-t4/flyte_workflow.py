@@ -144,31 +144,34 @@ def run(dry_run: bool = False) -> None:
         "mode":         "flyte",
     }
 
+    # Check for checkpoint before creating a new Firestore run
+    prior = checkpoint.load()
+
     if dry_run:
         run_id = ""
         print("Run started: (dry run — no Firestore)")
+    elif prior is not None and prior.get("run_id"):
+        # Resume existing run — do not create a new Firestore run
+        run_id = prior["run_id"]
     else:
         try:
             run_id = firestore_logger.create_run(config=initial_config, project_id=gcp_project)
         except Exception as e:
             print(f"WARNING: Firestore create_run failed: {e}. Continuing without logging.")
             run_id = ""
-        print(f"Run started: {run_id}")
+    print(f"Run started: {run_id}")
 
     deadline = time.time() + RUN_SECONDS
 
     flyte.init(local_persistence=True)
 
     # Resume from checkpoint if one exists (e.g. after a crash or credit pause)
-    prior = checkpoint.load()
     if prior is not None:
         print(f"Resuming from checkpoint saved at {prior['saved_at']}")
         print(f"  experiment_number={prior['experiment_number']}  val_bpb={prior['current_val_bpb']:.6f}")
         current_val_bpb    = prior["current_val_bpb"]
         experiment_number  = prior["experiment_number"]
         experiment_history = prior["experiment_history"]
-        if not run_id and prior.get("run_id"):
-            run_id = prior["run_id"]
     else:
         # Baseline measurement as a Flyte task
         # local_persistence=True enables TUI visibility via `flyte start tui`

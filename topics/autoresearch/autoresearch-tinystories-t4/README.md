@@ -4,6 +4,10 @@ An adaptation of [Karpathy's AutoResearch](https://github.com/karpathy/autoresea
 
 An AI agent runs overnight, autonomously modifying `train.py`, training a small GPT for 5 minutes, measuring `val_bpb` (validation bits per byte), and keeping or discarding each change. Results are logged to **Google Firestore** and visualized in a **local Gradio dashboard**.
 
+The agent loop can be run in two modes:
+- **`agent.py`** — lightweight Python loop, simple to run
+- **`flyte_workflow.py`** — same logic orchestrated as [Flyte 2](https://github.com/flyteorg/flyte-sdk) tasks, with per-experiment visibility in the Flyte TUI
+
 ---
 
 ## Project design
@@ -42,7 +46,7 @@ The result is autonomous ML experimentation — the agent explores the hyperpara
 │    ├── runs train.py (5 min)                │
 │    ├── parses val_bpb from stdout           │
 │    ├── keep or revert train.py              │
-│    └── logs to Firestore via               │
+│    └── logs to Firestore via                │
 │        firestore_logger.py                  │
 │                                             │
 └──────────────────┬──────────────────────────┘
@@ -82,7 +86,9 @@ The result is autonomous ML experimentation — the agent explores the hyperpara
 
 | File | Responsibility |
 |------|---------------|
-| `agent.py` | Main loop: reads, proposes, applies, trains, evaluates, logs |
+| `agent.py` | Lightweight loop: reads, proposes, applies, trains, evaluates, logs |
+| `flyte_workflow.py` | Flyte 2 orchestration: same logic as agent.py wrapped as Flyte tasks |
+| `core.py` | Shared experiment logic used by both agent.py and flyte_workflow.py |
 | `train.py` | GPT model + training loop. **Only file the agent modifies** |
 | `prepare.py` | One-time dataset download and tokenization. Never modified |
 | `checkpoint.py` | Crash recovery: save/load/clear `checkpoint.json` after each experiment |
@@ -212,7 +218,9 @@ Local Machine
 
 ```
 autoresearch-tinystories-t4/
-  ├── agent.py              — main overnight loop
+  ├── agent.py              — lightweight overnight loop
+  ├── flyte_workflow.py     — Flyte 2 orchestration (same logic as agent.py)
+  ├── core.py               — shared experiment logic (used by both)
   ├── train.py              — GPT training script (only file agent modifies)
   ├── prepare.py            — TinyStories download + tokenization (run once)
   ├── checkpoint.py         — crash recovery (checkpoint.json read/write/clear)
@@ -547,6 +555,80 @@ gcloud compute instances stop autoresearch-t4 --zone=YOUR_ZONE
 
 ---
 
+## Part 8 — Flyte workflow (alternative orchestration)
+
+`flyte_workflow.py` runs the same experiment logic as `agent.py` but orchestrated as [Flyte 2](https://github.com/flyteorg/flyte-sdk) tasks. Each experiment becomes a tracked task visible in the **Flyte TUI** with status, duration, and attempt count.
+
+Both modes write to the same Firestore database — runs appear in the Gradio dashboard dropdown and can be toggled between.
+
+### Install Flyte on the T4
+
+```bash
+pip install "flyte[tui]"
+```
+
+Verify:
+```bash
+python -c "import flyte; print(flyte.__version__)"
+```
+
+### Smoke test
+
+```bash
+python flyte_workflow.py --dry-run --reset
+```
+
+- `--dry-run` — disables all Firestore writes
+- `--reset` — resets `train.py` to the git baseline before starting
+
+### Production run
+
+Run in a `tmux` session so it survives SSH disconnects:
+
+```bash
+tmux new -s flyte
+python flyte_workflow.py --reset
+```
+
+Detach with `Ctrl+B` then `D`. Reattach with:
+```bash
+tmux attach -t flyte
+```
+
+### View the Flyte TUI
+
+In a second SSH session:
+
+```bash
+cd ai-build-and-learn/topics/autoresearch/autoresearch-tinystories-t4
+source venv/bin/activate
+flyte start tui
+```
+
+Press `r` to refresh. Each experiment appears as a row with task name, status, duration, and error if any.
+
+| Key | Action |
+|-----|--------|
+| `r` | Refresh |
+| `d` | Delete selected run |
+| `c` | Clear all runs |
+| `q` | Quit |
+
+### Two modes side by side
+
+| | `agent.py` | `flyte_workflow.py` |
+|---|---|---|
+| Orchestration | Plain Python loop | Flyte 2 tasks |
+| Observability | stdout + Gradio | Flyte TUI + Gradio |
+| Firestore | ✓ | ✓ |
+| Crash recovery | checkpoint.json | checkpoint.json |
+| Reset to baseline | `--reset` flag | `--reset` flag |
+| Run tag in Firestore | `mode: agent` | `mode: flyte` |
+
+Both runs appear in the Gradio dashboard. Use the **Run** dropdown to toggle between them.
+
+---
+
 ## Known issues and workarounds
 
 
@@ -559,3 +641,5 @@ gcloud compute instances stop autoresearch-t4 --zone=YOUR_ZONE
 | Firestore `(default)` database not found | Set `FIRESTORE_DATABASE=your-database-name` env var |
 | SSH drops during overnight run | Use `tmux` — run detaches from terminal |
 | Want to start fresh after a crash | Delete `checkpoint.json` before re-running agent.py |
+| Flyte TUI shows stale `running` status | Run was killed with Ctrl+C — use `d` in TUI to delete the stale row |
+| Flyte TUI is empty | Ensure `local_persistence=True` is set in `flyte.init()` and restart TUI after run starts |

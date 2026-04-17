@@ -125,7 +125,8 @@ def run(dry_run: bool = False) -> None:
     deadline = time.time() + RUN_SECONDS
 
     # Baseline measurement as a Flyte task
-    flyte.init()
+    # persist=True enables TUI visibility via `flyte start tui`
+    flyte.init(persist=True)
     baseline_run = flyte.run(measure_baseline)
     current_val_bpb = baseline_run.outputs().o0
 

@@ -31,6 +31,7 @@ from core import (
     CLAUDE_MODEL,
     PROGRAM_MD,
     read_file,
+    run_training,
     apply_and_train,
     evaluate_and_log,
     propose_change,

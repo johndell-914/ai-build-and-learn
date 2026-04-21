@@ -1,16 +1,15 @@
 """
 workflows.py — Flyte tasks and parallel workflows for Gemma 4 Smart Gallery.
 
-Each image is processed as a discrete Flyte task, visible in the Flyte TUI.
-Parallel execution happens inside coordinator tasks via asyncio.gather() + .aio —
-.aio must be called from within a Flyte task context, not from regular functions.
+Each image is processed as a discrete flyte.run() call so every image
+appears as its own task in the Flyte TUI. Tasks run sequentially but are
+individually visible and tracked.
 
 Usage:
     flyte start tui          # terminal 1 — watch tasks execute
     python app.py            # terminal 2 — Gradio UI triggers these workflows
 """
 
-import asyncio
 from pathlib import Path
 
 import flyte
@@ -45,16 +44,6 @@ async def describe_image_task(image_path: str) -> dict:
 
 
 @env.task
-async def describe_all_task(image_paths: list[str]) -> list[dict]:
-    """Fan out describe_image_task across all images in parallel."""
-    results = await asyncio.gather(*[
-        describe_image_task.aio(image_path=path)
-        for path in image_paths
-    ])
-    return list(results)
-
-
-@env.task
 async def save_descriptions_task(results: list[dict]) -> int:
     """Persist all descriptions to SQLite. Returns count saved."""
     db.init_db()
@@ -73,16 +62,6 @@ async def check_match_task(image_path: str, query: str) -> dict:
 
 
 @env.task
-async def check_all_task(image_paths: list[str], query: str) -> list[dict]:
-    """Fan out check_match_task across all images in parallel."""
-    results = await asyncio.gather(*[
-        check_match_task.aio(image_path=path, query=query)
-        for path in image_paths
-    ])
-    return list(results)
-
-
-@env.task
 async def collect_matches_task(results: list[dict]) -> list[str]:
     """Filter and return paths of images that matched the query."""
     return [r["path"] for r in results if r["matched"]]
@@ -93,6 +72,7 @@ async def collect_matches_task(results: list[dict]) -> list[str]:
 def run_describe_workflow(folder_path: str) -> list[dict]:
     """
     Process all images in folder_path with Gemma 4 and cache descriptions.
+    Each image is a discrete flyte.run() call — visible individually in TUI.
     Returns list of {path, description} dicts for UI rendering.
     """
     flyte.init(local_persistence=True)
@@ -103,8 +83,11 @@ def run_describe_workflow(folder_path: str) -> list[dict]:
     if not image_paths:
         return []
 
-    describe_run = flyte.run(describe_all_task, image_paths=image_paths)
-    results      = describe_run.outputs().o0
+    results = []
+    for path in image_paths:
+        run    = flyte.run(describe_image_task, image_path=path)
+        result = run.outputs().o0
+        results.append(result)
 
     flyte.run(save_descriptions_task, results=results)
 
@@ -114,7 +97,8 @@ def run_describe_workflow(folder_path: str) -> list[dict]:
 def run_search_workflow(folder_path: str, query: str) -> dict:
     """
     Check every image in folder_path against query using Gemma 4 vision.
-    Returns dict with total scanned, match count, and matching paths.
+    Each image is a discrete flyte.run() call — visible individually in TUI.
+    Returns dict with total scanned and matching paths.
     """
     flyte.init(local_persistence=True)
 
@@ -124,8 +108,11 @@ def run_search_workflow(folder_path: str, query: str) -> dict:
     if not image_paths:
         return {"total": 0, "matches": []}
 
-    check_run = flyte.run(check_all_task, image_paths=image_paths, query=query)
-    results   = check_run.outputs().o0
+    results = []
+    for path in image_paths:
+        run    = flyte.run(check_match_task, image_path=path, query=query)
+        result = run.outputs().o0
+        results.append(result)
 
     collect_run = flyte.run(collect_matches_task, results=results)
     matches     = collect_run.outputs().o0

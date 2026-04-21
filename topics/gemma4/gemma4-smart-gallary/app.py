@@ -53,18 +53,20 @@ def on_search(folder_path: str, query: str) -> tuple[str, str]:
     yield ui.loading_card(f'Searching for "{query}"...'), ""
 
     try:
-        matched_paths = workflows.run_search_workflow(folder_path, query.strip())
+        result        = workflows.run_search_workflow(folder_path, query.strip())
+        matched_paths = result["matches"]
+        total         = result["total"]
     except Exception as e:
         yield ui.status_message(f"Error: {e}", "error"), ""
         return
 
     if not matched_paths:
-        yield ui.status_message(f'No images matched "{query}".', "warn"), ""
+        yield ui.status_message(f'Searched {total} image(s) — no matches for "{query}".', "warn"), ""
         return
 
     cards = [ui.image_card(path, f'Matched: "{query}"') for path in matched_paths]
     grid  = ui.results_grid(cards, label=f'images matched "{query}"')
-    yield ui.status_message(f'{len(matched_paths)} match(es) found.', "success"), grid
+    yield ui.status_message(f'Searched {total} image(s) — {len(matched_paths)} matched "{query}".', "success"), grid
 
 
 # ── UI layout ─────────────────────────────────────────────────────────────────

@@ -28,11 +28,16 @@ def cmd_describe(folder: str) -> None:
 
 def cmd_search(folder: str, query: str) -> None:
     print(f'Searching for "{query}" in: {folder}')
-    matches = workflows.run_search_workflow(folder, query)
+    result  = workflows.run_search_workflow(folder, query)
+    total   = result["total"]
+    matches = result["matches"]
+
+    print(f"\nSearched {total} image(s) — {len(matches)} matched \"{query}\".")
+
     if not matches:
-        print(f'No images matched "{query}".')
+        print("No matching images found.")
         return
-    print(f"\n{len(matches)} match(es):")
+
     for path in matches:
         print(f"  {path}")
 

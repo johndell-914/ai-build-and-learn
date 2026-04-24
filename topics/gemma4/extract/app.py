@@ -21,6 +21,9 @@ import ollama
 
 DEFAULT_MODEL = os.environ.get("GEMMA_MODEL", "gemma4:31b")
 
+# Rough chars-per-token heuristic for the thinking-budget cutoff.
+CHARS_PER_TOKEN = 3.5
+
 # ---------------------------------------------------------------------------
 # Schemas — each is a (name, schema, sample input) triple shown in the UI.
 # ---------------------------------------------------------------------------
@@ -149,14 +152,18 @@ def list_models() -> list[str]:
         return [DEFAULT_MODEL]
 
 
-def extract(text: str, schema_json: str, model: str):
-    """Call Gemma 4 with the given JSON schema as the format constraint."""
+def extract(text: str, schema_json: str, model: str, think_budget: int):
+    """Stream (thinking, pretty_json, raw). JSON schema constrains content only —
+    thinking tokens are free-form. If thinking exceeds budget before JSON starts,
+    we close the stream and re-prompt without thinking enabled."""
     if not text.strip():
-        return "Paste some text first.", ""
+        yield "", "Paste some text first.", ""
+        return
     try:
         schema = json.loads(schema_json)
     except json.JSONDecodeError as e:
-        return f"Invalid schema JSON: {e}", ""
+        yield "", f"Invalid schema JSON: {e}", ""
+        return
 
     system = (
         "You extract structured data from text into JSON matching the given schema. "
@@ -165,21 +172,60 @@ def extract(text: str, schema_json: str, model: str):
         "in an 'items' array if they are actual items — never totals, taxes, or "
         "metadata. Output JSON only, no prose."
     )
-    resp = ollama.chat(
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": text},
+    ]
+    budget_chars = int(think_budget * CHARS_PER_TOKEN) if think_budget else 0
+
+    stream = ollama.chat(
         model=model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": text},
-        ],
+        messages=messages,
+        stream=True,
+        think=True,
         format=schema,
         options={"temperature": 0.0},
     )
-    raw = resp["message"]["content"]
+
+    thinking, raw = "", ""
+    capped = False
+    try:
+        for chunk in stream:
+            m = chunk["message"]
+            if m.get("thinking"):
+                thinking += m["thinking"]
+            if m.get("content"):
+                raw += m["content"]
+            yield thinking, raw or "_streaming..._", raw
+
+            if budget_chars and not raw and len(thinking) >= budget_chars:
+                capped = True
+                break
+    finally:
+        stream.close()
+
+    if capped:
+        thinking += f"\n\n_[capped at ~{think_budget} tokens — forcing JSON now]_"
+        yield thinking, "_streaming..._", ""
+
+        answer_stream = ollama.chat(
+            model=model,
+            messages=messages,
+            stream=True,
+            think=False,
+            format=schema,
+            options={"temperature": 0.0},
+        )
+        raw = ""
+        for chunk in answer_stream:
+            raw += chunk["message"].get("content", "")
+            yield thinking, raw or "_streaming..._", raw
+
     try:
         pretty = json.dumps(json.loads(raw), indent=2)
     except json.JSONDecodeError:
         pretty = raw
-    return pretty, raw
+    yield thinking, pretty, raw
 
 
 def load_preset(name: str):
@@ -201,6 +247,11 @@ def build_ui() -> gr.Blocks:
             preset = gr.Dropdown(
                 list(PRESETS.keys()), value="Receipt", label="Preset schema",
             )
+            think_budget = gr.Slider(
+                0, 4000, value=0, step=100,
+                label="Thinking budget (tokens, 0 = unlimited)",
+                info="Caps thinking. When hit, we force the JSON answer.",
+            )
 
         with gr.Row():
             with gr.Column():
@@ -213,11 +264,20 @@ def build_ui() -> gr.Blocks:
                 )
                 submit = gr.Button("Extract", variant="primary")
             with gr.Column():
-                output = gr.Code(language="json", label="Output", lines=20)
+                with gr.Accordion("🧠 Thinking", open=False):
+                    thinking = gr.Textbox(
+                        label=None, show_label=False, lines=10,
+                        placeholder="Thinking tokens stream here...",
+                    )
+                output = gr.Code(language="json", label="Output", lines=15)
                 raw = gr.Textbox(label="Raw model output", lines=4, visible=False)
 
         preset.change(load_preset, inputs=preset, outputs=[text, schema])
-        submit.click(extract, inputs=[text, schema, model], outputs=[output, raw])
+        submit.click(
+            extract,
+            inputs=[text, schema, model, think_budget],
+            outputs=[thinking, output, raw],
+        )
 
     return demo
 

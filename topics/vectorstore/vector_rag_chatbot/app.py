@@ -202,7 +202,7 @@ def run_ingest(uploaded_files, collection_name, chunk_size, chunk_overlap):
 def chat(query, history, collection_name, top_k):
     query = query.strip()
     if not query:
-        return history, ""
+        return history
 
     history = history or []
     history.append({"role": "user", "content": query})
@@ -212,7 +212,7 @@ def chat(query, history, collection_name, top_k):
             "role": "assistant",
             "content": "⚠️ Please set a collection name before chatting.",
         })
-        return history, ""
+        return history
 
     try:
         from workflows import query_pipeline
@@ -332,7 +332,7 @@ def build_ui() -> gr.Blocks:
                 query_input.submit(
                     fn=chat,
                     inputs=[query_input, chatbot, chat_collection, top_k],
-                    outputs=[chatbot, query_input],
+                    outputs=[chatbot],
                 )
 
                 clear_btn.click(

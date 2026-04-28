@@ -99,3 +99,10 @@
     font-family: monospace !important;
     font-size: 0.85em !important;
 }
+
+/* ── Tab sidebar column ───────────────────────────────────────────────────── */
+
+.tab-sidebar {
+    border-right: 1px solid rgba(255,255,255,0.1);
+    padding-right: 16px !important;
+}

@@ -62,6 +62,7 @@ _CSS = """
 .score-mid  { background: #fff3cd; color: #856404; padding: 2px 7px; border-radius: 10px; font-size: 0.8em; font-weight: 700; }
 .score-low  { background: #f8d7da; color: #721c24; padding: 2px 7px; border-radius: 10px; font-size: 0.8em; font-weight: 700; }
 .log-box textarea { font-family: monospace !important; font-size: 0.85em !important; }
+.tab-sidebar { border-right: 1px solid rgba(255,255,255,0.1); padding-right: 16px !important; }
 """
 
 def _load_css() -> str:
@@ -264,38 +265,37 @@ def build_ui() -> gr.Blocks:
             with gr.Tab("📥 Ingest Documents"):
 
                 with gr.Row():
-                    ingest_collection = gr.Textbox(
-                        label="Collection Name",
-                        value="everstorm_docs",
-                        scale=2,
-                    )
-                    chunk_size = gr.Slider(
-                        minimum=100, maximum=800, value=300, step=50,
-                        label="Chunk Size (chars)",
-                        scale=2,
-                    )
-                    chunk_overlap = gr.Slider(
-                        minimum=0, maximum=150, value=30, step=10,
-                        label="Chunk Overlap (chars)",
-                        scale=2,
-                    )
+                    with gr.Column(scale=1, min_width=220, elem_classes=["tab-sidebar"]):
+                        ingest_collection = gr.Textbox(
+                            label="Collection Name",
+                            value="everstorm_docs",
+                        )
+                        chunk_size = gr.Slider(
+                            minimum=100, maximum=800, value=300, step=50,
+                            label="Chunk Size (chars)",
+                        )
+                        chunk_overlap = gr.Slider(
+                            minimum=0, maximum=150, value=30, step=10,
+                            label="Chunk Overlap (chars)",
+                        )
 
-                file_upload = gr.File(
-                    file_types=[".pdf"],
-                    file_count="multiple",
-                    label="Upload PDFs",
-                )
+                    with gr.Column(scale=4):
+                        file_upload = gr.File(
+                            file_types=[".pdf"],
+                            file_count="multiple",
+                            label="Upload PDFs",
+                        )
 
-                ingest_btn = gr.Button("🚀 Run Ingest on Union", variant="primary")
+                        ingest_btn = gr.Button("🚀 Run Ingest on Union", variant="primary")
 
-                run_link = gr.HTML(elem_classes=["run-link"])
+                        run_link = gr.HTML(elem_classes=["run-link"])
 
-                status_log = gr.Textbox(
-                    label="Status Log",
-                    lines=14,
-                    interactive=False,
-                    elem_classes=["log-box"],
-                )
+                        status_log = gr.Textbox(
+                            label="Status Log",
+                            lines=14,
+                            interactive=False,
+                            elem_classes=["log-box"],
+                        )
 
                 ingest_btn.click(
                     fn=run_ingest,
@@ -307,30 +307,27 @@ def build_ui() -> gr.Blocks:
             with gr.Tab("💬 Chat"):
 
                 with gr.Row():
-                    chat_collection = gr.Textbox(
-                        label="Collection Name",
-                        value="everstorm_docs",
-                        scale=3,
-                    )
-                    top_k = gr.Slider(
-                        minimum=1, maximum=10, value=5, step=1,
-                        label="Top-k Chunks",
-                        scale=1,
-                    )
+                    with gr.Column(scale=1, min_width=220, elem_classes=["tab-sidebar"]):
+                        chat_collection = gr.Textbox(
+                            label="Collection Name",
+                            value="everstorm_docs",
+                        )
+                        top_k = gr.Slider(
+                            minimum=1, maximum=10, value=5, step=1,
+                            label="Top-k Chunks",
+                        )
+                        clear_btn = gr.Button("🗑 Clear")
 
-                chatbot = gr.Chatbot(
-                    label="Everstorm Support",
-                    height=480,
-                )
-
-                with gr.Row():
-                    query_input = gr.Textbox(
-                        placeholder="Ask anything about Everstorm Outfitters...",
-                        label="",
-                        scale=5,
-                        submit_btn=True,
-                    )
-                    clear_btn = gr.Button("🗑 Clear", scale=1)
+                    with gr.Column(scale=4):
+                        query_input = gr.Textbox(
+                            placeholder="Ask anything about Everstorm Outfitters...",
+                            label="Question",
+                            submit_btn=True,
+                        )
+                        chatbot = gr.Chatbot(
+                            label="Everstorm Support",
+                            height=480,
+                        )
 
                 query_input.submit(
                     fn=chat,

@@ -251,7 +251,7 @@ def chat(query, history, collection_name, top_k):
             "content": f"❌ Error: {exc}",
         })
 
-    yield history, query
+    yield history, ""
 
 
 # ── UI layout ─────────────────────────────────────────────────────────────────
@@ -339,6 +339,7 @@ def build_ui() -> gr.Blocks:
                     fn=chat,
                     inputs=[query_input, chatbot, chat_collection, top_k],
                     outputs=[chatbot, query_input],
+                    show_progress="minimal",
                 )
 
                 clear_btn.click(

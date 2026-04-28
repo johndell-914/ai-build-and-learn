@@ -202,17 +202,23 @@ def run_ingest(uploaded_files, collection_name, chunk_size, chunk_overlap):
 def chat(query, history, collection_name, top_k):
     query = query.strip()
     if not query:
-        return history, query
+        yield history or [], query
+        return
 
-    history = history or []
+    history = list(history or [])
     history.append({"role": "user", "content": query})
+
+    # Yield immediately so the question stays visible and user message appears
+    # in the chatbot before the Flyte run starts
+    yield history, query
 
     if not collection_name.strip():
         history.append({
             "role": "assistant",
             "content": "⚠️ Please set a collection name before chatting.",
         })
-        return history, query
+        yield history, query
+        return
 
     try:
         from workflows import query_pipeline
@@ -245,7 +251,7 @@ def chat(query, history, collection_name, top_k):
             "content": f"❌ Error: {exc}",
         })
 
-    return history, query, ""
+    yield history, query
 
 
 # ── UI layout ─────────────────────────────────────────────────────────────────

@@ -18,6 +18,8 @@ import flyte
 import flyte.app
 import gradio as gr
 
+import config  # loads .env and calls flyte.init() for the right backend
+
 CSS_FILE  = Path(__file__).parent / "styles.css"
 
 # ── Union App deployment environment ──────────────────────────────────────────

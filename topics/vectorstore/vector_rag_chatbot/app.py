@@ -315,9 +315,16 @@ def build_ui() -> gr.Blocks:
 # ── Union cluster entry point ─────────────────────────────────────────────────
 
 @serving_env.server
-def _cluster_server():
+async def _cluster_server():
+    import asyncio
     css = CSS_FILE.read_text()
-    build_ui().launch(server_name="0.0.0.0", server_port=7860, share=False, css=css)
+    ui = build_ui()
+    # Run Gradio in a thread so its internal asyncio usage doesn't conflict
+    # with the Union cluster's outer asyncio.run() wrapper.
+    await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: ui.launch(server_name="0.0.0.0", server_port=7860, share=False, css=css),
+    )
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

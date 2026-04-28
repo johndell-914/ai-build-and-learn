@@ -74,14 +74,7 @@ def _load_css() -> str:
 
 serving_env = flyte.app.AppEnvironment(
     name="everstorm-rag-chatbot",
-    image=flyte.Image.from_debian_base(
-        python_version=(3, 11),
-        registry="docker.io/johndellenbaugh",
-    ).with_pip_packages(
-        "gradio>=6.0.0",
-        "flyte>=2.1.2",
-        "python-dotenv>=1.0.0",
-    ),
+    image=flyte.Image.from_ref_name(name="docker.io/johndellenbaugh/rag-app:latest"),
     secrets=[
         flyte.Secret(key="ANTHROPIC_API_KEY", as_env_var="ANTHROPIC_API_KEY"),
         flyte.Secret(key="PG_URL",             as_env_var="PG_URL"),

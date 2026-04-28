@@ -20,7 +20,6 @@ import gradio as gr
 
 from workflows import ingest_pipeline, query_pipeline
 
-DATA_DIR  = Path(__file__).parent / "data"
 CSS_FILE  = Path(__file__).parent / "styles.css"
 
 # ── Union App deployment environment ──────────────────────────────────────────
@@ -98,17 +97,11 @@ def build_run_link(run) -> str:
         return ""
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _pdf_choices() -> list[str]:
-    return sorted(p.name for p in DATA_DIR.glob("*.pdf"))
-
-
 # ── Ingest handler ────────────────────────────────────────────────────────────
 
-def run_ingest(selected_files, collection_name, chunk_size, chunk_overlap):
-    if not selected_files:
-        yield "⚠️  No files selected.", ""
+def run_ingest(uploaded_files, collection_name, chunk_size, chunk_overlap):
+    if not uploaded_files:
+        yield "⚠️  No files uploaded.", ""
         return
 
     if not collection_name.strip():
@@ -121,11 +114,12 @@ def run_ingest(selected_files, collection_name, chunk_size, chunk_overlap):
         log_lines.append(msg)
         return "\n".join(log_lines)
 
-    yield emit(f"⏳ Encoding {len(selected_files)} PDFs..."), ""
+    yield emit(f"⏳ Encoding {len(uploaded_files)} PDFs..."), ""
 
     filenames, pdf_bytes_b64 = [], []
-    for fname in selected_files:
-        b64 = base64.b64encode((DATA_DIR / fname).read_bytes()).decode()
+    for file_path in uploaded_files:
+        fname = Path(file_path).name
+        b64 = base64.b64encode(Path(file_path).read_bytes()).decode()
         filenames.append(fname)
         pdf_bytes_b64.append(b64)
         yield emit(f"   ✅ {fname}"), ""
@@ -243,10 +237,10 @@ def build_ui() -> gr.Blocks:
                         scale=2,
                     )
 
-                file_selector = gr.CheckboxGroup(
-                    choices=_pdf_choices(),
-                    value=_pdf_choices(),
-                    label="PDFs to Ingest  (all selected by default)",
+                file_upload = gr.File(
+                    file_types=[".pdf"],
+                    file_count="multiple",
+                    label="Upload PDFs",
                 )
 
                 ingest_btn = gr.Button("🚀 Run Ingest on Union", variant="primary")
@@ -262,7 +256,7 @@ def build_ui() -> gr.Blocks:
 
                 ingest_btn.click(
                     fn=run_ingest,
-                    inputs=[file_selector, ingest_collection, chunk_size, chunk_overlap],
+                    inputs=[file_upload, ingest_collection, chunk_size, chunk_overlap],
                     outputs=[status_log, run_link],
                 )
 

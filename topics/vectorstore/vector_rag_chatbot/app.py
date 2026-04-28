@@ -74,7 +74,7 @@ def _load_css() -> str:
 
 serving_env = flyte.app.AppEnvironment(
     name="everstorm-rag-chatbot",
-    image=flyte.Image.from_ref_name(name="docker.io/johndellenbaugh/rag-app:latest"),
+    image="docker.io/johndellenbaugh/rag-app:latest",
     secrets=[
         flyte.Secret(key="ANTHROPIC_API_KEY", as_env_var="ANTHROPIC_API_KEY"),
         flyte.Secret(key="PG_URL",             as_env_var="PG_URL"),

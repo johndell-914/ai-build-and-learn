@@ -13,6 +13,7 @@ Usage:
     python generate_docs.py
 """
 
+import os
 import re
 from pathlib import Path
 
@@ -36,7 +37,7 @@ from reportlab.platypus import (
 
 DATA_DIR = Path(__file__).parent / "data"
 
-client = Anthropic()
+client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
 SYSTEM_PROMPT = """\
 You are writing customer support policy documents for Everstorm Outfitters,

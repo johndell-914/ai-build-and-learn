@@ -7,6 +7,7 @@ on:
     paths:
       - "topics/graphs-neo4j/graph_rag_chatbot/Dockerfile"
       - "topics/graphs-neo4j/graph_rag_chatbot/Dockerfile.app"
+      - "topics/graphs-neo4j/graph_rag_chatbot/**/*.py"
 
 jobs:
   build-task-image:

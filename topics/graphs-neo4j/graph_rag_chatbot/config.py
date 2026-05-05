@@ -44,7 +44,7 @@ def anthropic_client():
 # ---------------------------------------------------------------------------
 
 CLAUDE_MODEL = "claude-sonnet-4-6"
-EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # gte-small compatible, 384D
+EMBED_MODEL = "thenlper/gte-small"  # 384D, same model as vector RAG project
 EMBED_DIM = 384
 
 # ---------------------------------------------------------------------------

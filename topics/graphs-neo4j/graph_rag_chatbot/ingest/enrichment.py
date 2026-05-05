@@ -1,27 +1,11 @@
 """
 ingest/enrichment.py
 
-Tasks: resolve_entities_task, detect_communities_task, summarize_communities_task
+resolve_entities:      merge near-duplicate Entity nodes by embedding similarity.
+detect_communities:    run Louvain community detection over the entity graph.
+summarize_communities: generate Claude summaries for each community.
 
-Responsibility:
-    resolve_entities_task:
-        - Query all Entity nodes from Neo4j
-        - Embed entity names with gte-small
-        - Merge entity nodes with cosine similarity > 0.95 (de-duplication)
-        - Handles cases like "Everstorm", "Everstorm Outfitters", "the Company"
-
-    detect_communities_task:
-        - Query all Entity nodes and RELATIONSHIP edges from Neo4j
-        - Build a NetworkX graph from the entity relationship data
-        - Run Louvain community detection via python-louvain
-        - Assign community IDs back to Entity nodes in Neo4j
-        - Note: uses Python Louvain — GDS not available on AuraDB Free tier
-
-    summarize_communities_task:
-        - Query each community's member entities and relationships from Neo4j
-        - Call Claude Sonnet to generate a summary paragraph per community
-        - Create Community nodes in Neo4j with the summary text
-        - Create BELONGS_TO edges (Entity → Community)
+All three called sequentially inside ingest_pipeline.
 """
 
 import json
@@ -31,7 +15,6 @@ from itertools import combinations
 import networkx as nx
 import community as louvain_community  # python-louvain
 import numpy as np
-from flytekit import task, Resources
 from sentence_transformers import SentenceTransformer
 
 from config import (
@@ -48,14 +31,9 @@ def _cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-9))
 
 
-@task(requests=Resources(cpu="2", mem="2Gi"))
-def resolve_entities_task() -> str:
+def resolve_entities() -> str:
     """
     Merge near-duplicate Entity nodes in Neo4j using embedding cosine similarity.
-
-    Two entities whose name embeddings exceed ENTITY_MERGE_THRESHOLD are merged:
-    the lower-degree node's MENTIONS and RELATED edges are repointed to the
-    higher-degree node, then the duplicate is deleted.
 
     Returns:
         JSON summary — {merges_performed}.
@@ -74,7 +52,6 @@ def resolve_entities_task() -> str:
     embeddings = model.encode(names)
     name_to_vec = {name: embeddings[i] for i, name in enumerate(names)}
 
-    # Find pairs above threshold
     merge_pairs = []
     for a, b in combinations(names, 2):
         if _cosine_sim(name_to_vec[a], name_to_vec[b]) >= ENTITY_MERGE_THRESHOLD:
@@ -85,7 +62,6 @@ def resolve_entities_task() -> str:
     with driver2:
         with driver2.session() as session:
             for keep_name, drop_name in merge_pairs:
-                # Repoint MENTIONS edges from duplicate to canonical node
                 session.run(
                     """
                     MATCH (c:Chunk)-[:MENTIONS]->(drop:Entity {name: $drop})
@@ -95,7 +71,6 @@ def resolve_entities_task() -> str:
                     drop=drop_name,
                     keep=keep_name,
                 )
-                # Repoint outgoing RELATED edges
                 session.run(
                     """
                     MATCH (drop:Entity {name: $drop})-[r:RELATED]->(other:Entity)
@@ -105,7 +80,6 @@ def resolve_entities_task() -> str:
                     drop=drop_name,
                     keep=keep_name,
                 )
-                # Repoint incoming RELATED edges
                 session.run(
                     """
                     MATCH (other:Entity)-[r:RELATED]->(drop:Entity {name: $drop})
@@ -115,7 +89,6 @@ def resolve_entities_task() -> str:
                     drop=drop_name,
                     keep=keep_name,
                 )
-                # Delete duplicate
                 session.run(
                     "MATCH (e:Entity {name: $drop}) DETACH DELETE e",
                     drop=drop_name,
@@ -125,14 +98,10 @@ def resolve_entities_task() -> str:
     return json.dumps({"merges_performed": merges_performed})
 
 
-@task(requests=Resources(cpu="2", mem="2Gi"))
-def detect_communities_task(resolve_summary: str) -> str:
+def detect_communities() -> str:
     """
     Run Louvain community detection over the entity graph and write community
     IDs back to Neo4j Entity nodes.
-
-    Args:
-        resolve_summary: JSON from resolve_entities_task (used for sequencing only).
 
     Returns:
         JSON summary — {communities_found, entities_assigned}.
@@ -153,7 +122,6 @@ def detect_communities_task(resolve_summary: str) -> str:
 
     partition = louvain_community.best_partition(G, resolution=LOUVAIN_RESOLUTION)
 
-    # Write community_id back to each Entity node
     driver2 = neo4j_driver()
     with driver2:
         with driver2.session() as session:
@@ -171,16 +139,9 @@ def detect_communities_task(resolve_summary: str) -> str:
     })
 
 
-@task(requests=Resources(cpu="1", mem="1Gi"))
-def summarize_communities_task(detect_summary: str) -> str:
+def summarize_communities() -> str:
     """
     Generate a natural-language summary for each community and store it in Neo4j.
-
-    Queries each community's entities and relationships, calls Claude to write
-    a summary paragraph, then creates a Community node with BELONGS_TO edges.
-
-    Args:
-        detect_summary: JSON from detect_communities_task (used for sequencing only).
 
     Returns:
         JSON summary — {communities_summarized}.
@@ -202,7 +163,6 @@ def summarize_communities_task(detect_summary: str) -> str:
                 "       a.community_id AS cid"
             ).data()
 
-    # Group by community
     community_entities: dict = defaultdict(list)
     community_rels: dict = defaultdict(list)
 
@@ -244,7 +204,6 @@ def summarize_communities_task(detect_summary: str) -> str:
                 )
                 summary_text = response.content[0].text.strip()
 
-                # Create Community node and BELONGS_TO edges
                 session.run(
                     """
                     MERGE (comm:Community {id: $cid})

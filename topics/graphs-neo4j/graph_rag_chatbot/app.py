@@ -2,7 +2,7 @@
 app.py — Gradio UI for the Everstorm GraphRAG chatbot.
 
 Two tabs:
-  Ingest Graph  — kick off ingest_pipeline on Union (reads PDFs from data/)
+  Ingest Graph  — encode PDFs as base64 and run ingest_pipeline on Union
   Chat          — ask questions, see answer + retrieval mode badge + sources + entities
 
 Run locally:
@@ -12,9 +12,8 @@ Deploy to Union:
     python app.py --deploy
 """
 
+import base64
 import json
-import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -25,33 +24,6 @@ import gradio as gr
 import config    # loads .env and calls flyte.init() for the right backend
 import workflows  # imported at module level so flyte deploy bundles workflows
 
-
-def _remote():
-    """Return a UnionRemote configured for the current backend."""
-    from flytekit.configuration import Config, PlatformConfig
-    from union.remote import UnionRemote
-
-    if os.getenv("FLYTE_BACKEND") == "cluster":
-        cfg = Config(platform=PlatformConfig(endpoint="host.docker.internal:8090", insecure=True))
-    else:
-        cfg = Config(platform=PlatformConfig(endpoint=config.UNION_ENDPOINT))
-
-    return UnionRemote(
-        config=cfg,
-        default_project=config.UNION_PROJECT,
-        default_domain=config.UNION_DOMAIN,
-    )
-
-
-def _execution_url(execution) -> str:
-    try:
-        name = execution.id.name
-        return (
-            f"https://{config.UNION_ENDPOINT}/v2/domain/{config.UNION_DOMAIN}"
-            f"/project/{config.UNION_PROJECT}/executions/{name}"
-        )
-    except Exception:
-        return ""
 
 _CSS = """
 /* ── Mode badges ──────────────────────────────────────────────────────── */
@@ -200,29 +172,41 @@ def run_ingest(uploaded_files):
         log_lines.append(msg)
         return "\n".join(log_lines)
 
+    filenames: list[str] = []
+    pdf_bytes_b64: list[str] = []
+
     if uploaded_files:
-        _DATA_DIR.mkdir(exist_ok=True)
-        yield emit(f"📂 Copying {len(uploaded_files)} uploaded file(s) to data/..."), ""
+        yield emit(f"📂 Encoding {len(uploaded_files)} uploaded PDF(s)..."), ""
         for file_path in uploaded_files:
             src = Path(file_path)
-            shutil.copy2(src, _DATA_DIR / src.name)
+            filenames.append(src.name)
+            pdf_bytes_b64.append(base64.b64encode(src.read_bytes()).decode())
             yield emit(f"   ✅ {src.name}"), ""
     else:
-        yield emit("📂 Using PDFs already in data/..."), ""
+        pdf_paths = sorted(_DATA_DIR.glob("*.pdf"))
+        if not pdf_paths:
+            yield emit("⚠️  No PDFs found — upload files or add PDFs to data/"), ""
+            return
+        yield emit(f"📂 Encoding {len(pdf_paths)} PDF(s) from data/..."), ""
+        for p in pdf_paths:
+            filenames.append(p.name)
+            pdf_bytes_b64.append(base64.b64encode(p.read_bytes()).decode())
+            yield emit(f"   ✅ {p.name}"), ""
 
     yield emit("\n🚀 Dispatching ingest_pipeline → Union cluster..."), ""
 
     try:
         from workflows import ingest_pipeline
-        remote = _remote()
-        execution = remote.execute(ingest_pipeline, inputs={"data_dir": str(_DATA_DIR)})
-        url = _execution_url(execution)
-        link = f'<a href="{url}" target="_blank">🔗 View run on Union</a>' if url else ""
-
+        run = flyte.run(
+            ingest_pipeline,
+            filenames=filenames,
+            pdf_bytes_b64=pdf_bytes_b64,
+        )
+        link = build_run_link(run)
         yield emit("⏳ Running on Union — waiting for results..."), link
 
-        remote.wait(execution)
-        summary = json.loads(execution.outputs["o0"])
+        run.wait()
+        summary = json.loads(run.outputs().o0)
 
         yield emit(
             f"\n✅ Ingest complete!\n"
@@ -246,10 +230,9 @@ def chat(question, history):
 
     try:
         from workflows import query_pipeline
-        remote = _remote()
-        execution = remote.execute(query_pipeline, inputs={"question": question})
-        remote.wait(execution)
-        result = json.loads(execution.outputs["o0"])
+        run = flyte.run(query_pipeline, question=question)
+        run.wait()
+        result = json.loads(run.outputs().o0)
 
         answer   = result["answer"]
         mode     = result.get("retrieval_mode", "hybrid")

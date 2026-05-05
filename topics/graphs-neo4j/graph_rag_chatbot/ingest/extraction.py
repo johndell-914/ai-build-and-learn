@@ -1,24 +1,12 @@
 """
 ingest/extraction.py
 
-Task: extract_entities_task
-
-Responsibility:
-    - Receive a single chunk of text
-    - Call Claude Sonnet via tool use (structured output) to extract:
-        entities:      [{name, type, description}]
-        relationships: [{source, target, type, description}]
-    - Constrain extraction to Everstorm ontology:
-        Entity types:       PRODUCT, POLICY, PROGRAM, TIER, BENEFIT, CONDITION, PROCESS
-        Relationship types: HAS_POLICY, QUALIFIES_FOR, REQUIRES, APPLIES_TO, PART_OF, COVERS
-    - Return JSON: {chunk_id, entities, relationships}
-
-Runs as a map_task in ingest_pipeline — one Claude call per chunk, fully parallel.
+extract_entities: call Claude to extract entities and relationships from
+a single text chunk using the Everstorm ontology.
+Called sequentially inside ingest_pipeline for each chunk.
 """
 
 import json
-
-from flytekit import task, Resources
 
 from config import CLAUDE_MODEL, ENTITY_TYPES, RELATIONSHIP_TYPES, anthropic_client
 
@@ -70,12 +58,7 @@ _SYSTEM_PROMPT = (
 )
 
 
-@task(
-    cache=True,
-    cache_version="1",
-    requests=Resources(cpu="1", mem="500Mi"),
-)
-def extract_entities_task(chunk_json: str) -> str:
+def extract_entities(chunk_json: str) -> str:
     """
     Extract entities and relationships from a single text chunk via Claude tool use.
 

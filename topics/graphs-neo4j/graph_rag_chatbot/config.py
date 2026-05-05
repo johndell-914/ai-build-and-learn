@@ -32,6 +32,18 @@ elif BACKEND == "cluster":
 else:
     flyte.init(local_persistence=True)
 
+task_env = flyte.TaskEnvironment(
+    name="everstorm-graphrag-tasks",
+    image="docker.io/johndellenbaugh/graphrag-app:latest",
+    resources=flyte.Resources(cpu=2, memory="4Gi"),
+    secrets=[
+        flyte.Secret(key="ANTHROPIC_API_KEY", as_env_var="ANTHROPIC_API_KEY"),
+        flyte.Secret(key="NEO4J_URI",         as_env_var="NEO4J_URI"),
+        flyte.Secret(key="NEO4J_USERNAME",    as_env_var="NEO4J_USERNAME"),
+        flyte.Secret(key="NEO4J_PASSWORD",    as_env_var="NEO4J_PASSWORD"),
+    ],
+)
+
 
 def _secret(key: str) -> str:
     """Return secret from Flyte context when on cluster, env var otherwise."""

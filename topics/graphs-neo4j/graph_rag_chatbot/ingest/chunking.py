@@ -1,34 +1,20 @@
 """
 ingest/chunking.py
 
-Task: parse_and_chunk_task
-
-Responsibility:
-    - Decode base64 PDF bytes
-    - Extract full text with PyMuPDF
-    - Split into overlapping chunks with RecursiveCharacterTextSplitter
-    - Return JSON list of {source_doc, chunk_index, chunk_text}
-
-Cached per PDF input — re-ingesting an unchanged PDF is a free cache hit.
-One task dispatched per PDF, all running in parallel inside ingest_pipeline.
+parse_and_chunk: decode a PDF and split into overlapping text chunks.
+Called sequentially inside ingest_pipeline for each PDF.
 """
 
 import base64
 import json
 
 import fitz  # PyMuPDF
-from flytekit import task, Resources
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from config import CHUNK_SIZE, CHUNK_OVERLAP
 
 
-@task(
-    cache=True,
-    cache_version="1",
-    requests=Resources(cpu="1", mem="1Gi"),
-)
-def parse_and_chunk_task(source_doc: str, pdf_bytes_b64: str) -> str:
+def parse_and_chunk(source_doc: str, pdf_bytes_b64: str) -> str:
     """
     Parse a PDF and split into overlapping text chunks.
 

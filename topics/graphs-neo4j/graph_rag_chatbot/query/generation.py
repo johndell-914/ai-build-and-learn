@@ -1,21 +1,11 @@
 """
 query/generation.py
 
-Task: generate_task
-
-Responsibility:
-    - Receive the user question + retrieved context (chunks, entities, or community summary)
-    - Build a RAG prompt tailored to the retrieval mode used:
-        hybrid context   → cite source docs and entity relationships
-        entity context   → explain how entities are connected
-        community context → synthesize across the community summary
-    - Call Claude Sonnet to generate a grounded answer
-    - Return JSON: {answer, sources, retrieval_mode, entities_used}
+generate: build a RAG prompt from retrieved context and call Claude for the answer.
+Called inside query_pipeline after retrieval.
 """
 
 import json
-
-from flytekit import task, Resources
 
 from config import CLAUDE_MODEL, anthropic_client
 
@@ -92,14 +82,13 @@ _PROMPT_BUILDERS = {
 }
 
 
-@task(requests=Resources(cpu="1", mem="500Mi"))
-def generate_task(question: str, context_json: str) -> str:
+def generate(question: str, context_json: str) -> str:
     """
     Generate a grounded answer from retrieved context.
 
     Args:
         question:     The user's original question.
-        context_json: JSON string from the retrieval task (hybrid/entity/community).
+        context_json: JSON string from the retrieval function.
 
     Returns:
         JSON — {answer, sources, retrieval_mode, entities_used}.
@@ -119,7 +108,6 @@ def generate_task(question: str, context_json: str) -> str:
     )
     answer = response.content[0].text.strip()
 
-    # Collect metadata for the response
     sources = list({c["source_doc"] for c in context.get("chunks", [])})
     entities_used = (
         [e["name"] for e in context.get("entities", [])]

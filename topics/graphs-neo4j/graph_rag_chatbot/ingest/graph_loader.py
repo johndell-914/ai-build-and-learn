@@ -1,28 +1,15 @@
 """
 ingest/graph_loader.py
 
-Tasks: load_graph_task, create_vector_index_task
+load_graph: write chunks, entities, and relationships to Neo4j.
+create_vector_index: build the HNSW vector index on Chunk.embedding (idempotent).
 
-Responsibility:
-    load_graph_task:
-        - Connect to Neo4j AuraDB
-        - Create Document and Chunk nodes
-        - Embed each chunk with gte-small (384D)
-        - Set chunk.embedding property
-        - Create Entity nodes and RELATIONSHIP edges from extraction results
-        - Create HAS_CHUNK edges (Document → Chunk)
-        - Create MENTIONS edges (Chunk → Entity)
-
-    create_vector_index_task:
-        - Create HNSW vector index on Chunk.embedding
-        - cosine similarity, 384 dimensions
-        - CREATE VECTOR INDEX IF NOT EXISTS (idempotent)
+Both called sequentially inside ingest_pipeline.
 """
 
 import json
 from typing import List
 
-from flytekit import task, Resources
 from sentence_transformers import SentenceTransformer
 
 from config import (
@@ -66,15 +53,13 @@ MERGE (c)-[:MENTIONS]->(e)
 """
 
 
-@task(requests=Resources(cpu="2", mem="2Gi"))
-def load_graph_task(extraction_results: List[str]) -> str:
+def load_graph(extraction_results: List[str]) -> str:
     """
     Write all chunks, entities, and relationships to Neo4j.
 
     Args:
-        extraction_results: List of JSON strings from extract_entities_task,
-                            each containing {chunk_id, source_doc, chunk_text,
-                            entities, relationships}.
+        extraction_results: List of JSON strings, each containing
+                            {chunk_id, source_doc, chunk_text, entities, relationships}.
 
     Returns:
         JSON summary — {chunks_written, entities_written, relationships_written}.
@@ -97,7 +82,6 @@ def load_graph_task(extraction_results: List[str]) -> str:
                 entities = result["entities"]
                 relationships = result["relationships"]
 
-                # Document + Chunk nodes and HAS_CHUNK edge
                 session.run(
                     _MERGE_CHUNK_Q,
                     source_doc=source_doc,
@@ -106,12 +90,10 @@ def load_graph_task(extraction_results: List[str]) -> str:
                     chunk_index=chunk_index,
                 )
 
-                # Embed and store chunk vector
                 embedding = model.encode(chunk_text).tolist()
                 session.run(_SET_EMBEDDING_Q, chunk_id=chunk_id, embedding=embedding)
                 chunks_written += 1
 
-                # Entity nodes
                 for ent in entities:
                     session.run(
                         _MERGE_ENTITY_Q,
@@ -126,7 +108,6 @@ def load_graph_task(extraction_results: List[str]) -> str:
                     )
                     entities_written += 1
 
-                # Relationship edges between entities
                 for rel in relationships:
                     session.run(
                         _MERGE_RELATIONSHIP_Q,
@@ -144,14 +125,8 @@ def load_graph_task(extraction_results: List[str]) -> str:
     })
 
 
-@task(requests=Resources(cpu="1", mem="500Mi"))
-def create_vector_index_task(dummy: str = "") -> None:
-    """
-    Create the HNSW vector index on Chunk.embedding (idempotent).
-
-    The dummy arg lets the pipeline call this after load_graph_task completes
-    without needing its return value.
-    """
+def create_vector_index() -> None:
+    """Create the HNSW vector index on Chunk.embedding (idempotent)."""
     cypher = (
         f"CREATE VECTOR INDEX `{VECTOR_INDEX_NAME}` IF NOT EXISTS "
         f"FOR (c:Chunk) ON (c.embedding) "

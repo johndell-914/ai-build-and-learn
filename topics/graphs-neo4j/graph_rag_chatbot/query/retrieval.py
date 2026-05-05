@@ -1,11 +1,9 @@
 """
-query/retrieval.py
+query/retrieval.py — retrieval tasks (one dispatched per query based on mode)
 
-hybrid_retrieve:    vector search over Chunk nodes + graph expansion to Entities.
-entity_retrieve:    extract named entities from question, traverse their neighborhood.
-community_retrieve: find the most relevant Community node by embedding similarity.
-
-All three called inside query_pipeline depending on the routed mode.
+hybrid_retrieve:    vector search + graph expansion
+entity_retrieve:    named entity lookup + neighborhood traversal
+community_retrieve: community summary similarity search
 """
 
 import json
@@ -13,7 +11,7 @@ import json
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from config import CLAUDE_MODEL, EMBED_MODEL, VECTOR_INDEX_NAME, anthropic_client, neo4j_driver
+from config import CLAUDE_MODEL, EMBED_MODEL, VECTOR_INDEX_NAME, anthropic_client, neo4j_driver, task_env
 
 _TOP_K = 5
 
@@ -22,7 +20,8 @@ def _cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-9))
 
 
-def hybrid_retrieve(question: str) -> str:
+@task_env.task
+async def hybrid_retrieve(question: str) -> str:
     """
     Mode A — vector search over Chunk nodes + graph expansion to nearby Entities.
 
@@ -87,7 +86,8 @@ _ENTITY_EXTRACT_TOOL = {
 }
 
 
-def entity_retrieve(question: str) -> str:
+@task_env.task
+async def entity_retrieve(question: str) -> str:
     """
     Mode B — extract named entities from question, traverse their neighborhood in Neo4j.
 
@@ -134,7 +134,8 @@ def entity_retrieve(question: str) -> str:
     return json.dumps({"mode": "entity", "entities": results})
 
 
-def community_retrieve(question: str) -> str:
+@task_env.task
+async def community_retrieve(question: str) -> str:
     """
     Mode C — find the most relevant Community node by embedding similarity.
 

@@ -1,11 +1,9 @@
 """
-ingest/enrichment.py
+ingest/enrichment.py — entity resolution, community detection, and summarization tasks
 
 resolve_entities:      merge near-duplicate Entity nodes by embedding similarity.
 detect_communities:    run Louvain community detection over the entity graph.
 summarize_communities: generate Claude summaries for each community.
-
-All three called sequentially inside ingest_pipeline.
 """
 
 import json
@@ -24,6 +22,7 @@ from config import (
     LOUVAIN_RESOLUTION,
     anthropic_client,
     neo4j_driver,
+    task_env,
 )
 
 
@@ -31,7 +30,8 @@ def _cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-9))
 
 
-def resolve_entities() -> str:
+@task_env.task
+async def resolve_entities() -> str:
     """
     Merge near-duplicate Entity nodes in Neo4j using embedding cosine similarity.
 
@@ -98,7 +98,8 @@ def resolve_entities() -> str:
     return json.dumps({"merges_performed": merges_performed})
 
 
-def detect_communities() -> str:
+@task_env.task
+async def detect_communities() -> str:
     """
     Run Louvain community detection over the entity graph and write community
     IDs back to Neo4j Entity nodes.
@@ -139,7 +140,8 @@ def detect_communities() -> str:
     })
 
 
-def summarize_communities() -> str:
+@task_env.task
+async def summarize_communities() -> str:
     """
     Generate a natural-language summary for each community and store it in Neo4j.
 

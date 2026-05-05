@@ -1,10 +1,8 @@
 """
-ingest/graph_loader.py
+ingest/graph_loader.py — load_graph and create_vector_index tasks
 
-load_graph: write chunks, entities, and relationships to Neo4j.
+load_graph:          write chunks, entities, and relationships to Neo4j.
 create_vector_index: build the HNSW vector index on Chunk.embedding (idempotent).
-
-Both called sequentially inside ingest_pipeline.
 """
 
 import json
@@ -18,6 +16,7 @@ from config import (
     VECTOR_INDEX_NAME,
     VECTOR_SIMILARITY,
     neo4j_driver,
+    task_env,
 )
 
 _MERGE_CHUNK_Q = """
@@ -53,13 +52,10 @@ MERGE (c)-[:MENTIONS]->(e)
 """
 
 
-def load_graph(extraction_results: List[str]) -> str:
+@task_env.task
+async def load_graph(extraction_results: List[str]) -> str:
     """
     Write all chunks, entities, and relationships to Neo4j.
-
-    Args:
-        extraction_results: List of JSON strings, each containing
-                            {chunk_id, source_doc, chunk_text, entities, relationships}.
 
     Returns:
         JSON summary — {chunks_written, entities_written, relationships_written}.
@@ -125,7 +121,8 @@ def load_graph(extraction_results: List[str]) -> str:
     })
 
 
-def create_vector_index() -> None:
+@task_env.task
+async def create_vector_index() -> str:
     """Create the HNSW vector index on Chunk.embedding (idempotent)."""
     cypher = (
         f"CREATE VECTOR INDEX `{VECTOR_INDEX_NAME}` IF NOT EXISTS "
@@ -140,3 +137,5 @@ def create_vector_index() -> None:
     with driver:
         with driver.session() as session:
             session.run(cypher)
+
+    return "ok"

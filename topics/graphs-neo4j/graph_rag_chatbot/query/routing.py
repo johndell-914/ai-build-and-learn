@@ -1,11 +1,10 @@
 """
-query/routing.py
+query/routing.py — route_query task
 
-route_query: classify the user question into a retrieval mode.
-Called inside query_pipeline.
+Calls Claude to classify the question into a retrieval mode.
 """
 
-from config import CLAUDE_MODEL, anthropic_client
+from config import CLAUDE_MODEL, anthropic_client, task_env
 
 _ROUTE_TOOL = {
     "name": "classify_query",
@@ -44,7 +43,8 @@ _SYSTEM_PROMPT = (
 )
 
 
-def route_query(question: str) -> str:
+@task_env.task
+async def route_query(question: str) -> str:
     """
     Classify the user question into a retrieval mode.
 

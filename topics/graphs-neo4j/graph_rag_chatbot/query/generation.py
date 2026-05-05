@@ -1,13 +1,12 @@
 """
-query/generation.py
+query/generation.py — generate task
 
-generate: build a RAG prompt from retrieved context and call Claude for the answer.
-Called inside query_pipeline after retrieval.
+Builds a RAG prompt from retrieved context and calls Claude for the answer.
 """
 
 import json
 
-from config import CLAUDE_MODEL, anthropic_client
+from config import CLAUDE_MODEL, anthropic_client, task_env
 
 _SYSTEM_PROMPT = (
     "You are a helpful assistant for Everstorm Outfitters. "
@@ -82,13 +81,14 @@ _PROMPT_BUILDERS = {
 }
 
 
-def generate(question: str, context_json: str) -> str:
+@task_env.task
+async def generate(question: str, context_json: str) -> str:
     """
     Generate a grounded answer from retrieved context.
 
     Args:
         question:     The user's original question.
-        context_json: JSON string from the retrieval function.
+        context_json: JSON string from the retrieval task.
 
     Returns:
         JSON — {answer, sources, retrieval_mode, entities_used}.

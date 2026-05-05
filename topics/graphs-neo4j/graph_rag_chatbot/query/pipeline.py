@@ -1,9 +1,8 @@
 """
-query/pipeline.py
+query/pipeline.py — query_pipeline orchestrator
 
-Full GraphRAG query pipeline as a single flyte 2.x task.
-
-Routes the question → retrieves context → generates an answer.
+Routes question → retrieves context → generates answer.
+Each step is a separate Union task visible in the console.
 """
 
 from config import task_env
@@ -13,9 +12,15 @@ from query.generation import generate
 
 
 @task_env.task
-def query_pipeline(question: str) -> str:
+async def query_pipeline(question: str) -> str:
     """
     Full GraphRAG query pipeline.
+
+    Union shows this as:
+      query_pipeline
+        ├── route_query
+        ├── [hybrid_retrieve | entity_retrieve | community_retrieve]
+        └── generate
 
     Args:
         question: The user's natural-language question.
@@ -23,13 +28,13 @@ def query_pipeline(question: str) -> str:
     Returns:
         JSON — {answer, sources, retrieval_mode, entities_used}.
     """
-    mode = route_query(question=question)
+    mode = await route_query(question=question)
 
     if mode == "entity":
-        context = entity_retrieve(question=question)
+        context = await entity_retrieve(question=question)
     elif mode == "community":
-        context = community_retrieve(question=question)
+        context = await community_retrieve(question=question)
     else:
-        context = hybrid_retrieve(question=question)
+        context = await hybrid_retrieve(question=question)
 
-    return generate(question=question, context_json=context)
+    return await generate(question=question, context_json=context)

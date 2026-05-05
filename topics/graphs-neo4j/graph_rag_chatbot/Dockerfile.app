@@ -2,6 +2,7 @@ FROM python:3.11-slim
 
 RUN pip install --no-cache-dir \
     "flyte>=2.1.2" \
+    "union>=0.1.194" \
     "neo4j>=5.20.0" \
     "sentence-transformers>=3.0.0" \
     "anthropic>=0.40.0" \

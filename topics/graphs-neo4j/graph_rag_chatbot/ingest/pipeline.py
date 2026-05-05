@@ -1,19 +1,18 @@
 """
 ingest/pipeline.py
 
-Full GraphRAG ingest pipeline as a single flyte 2.x task.
+Full GraphRAG ingest pipeline as flyte 2.x tasks.
 
-Accepts pre-encoded PDF bytes so the task container receives all data
-as inputs (no local filesystem dependency). Steps run sequentially:
-  1. parse_and_chunk   — one call per PDF
-  2. extract_entities  — one call per chunk
-  3. load_graph        — write chunks + entities + relationships to Neo4j
-  4. create_vector_index — build HNSW index (idempotent)
-  5. resolve_entities  — merge near-duplicate entity nodes
-  6. detect_communities — Louvain community detection
-  7. summarize_communities — Claude summaries per community
+ingest_pipeline (async orchestrator)
+    Fans out process_pdf in parallel — one Union task per PDF — then runs
+    the sequential graph operations once all PDFs are processed.
+
+process_pdf (per-PDF task)
+    Parses and chunks one PDF, then calls Claude to extract entities and
+    relationships from each chunk. Returns a list of extraction-result JSON strings.
 """
 
+import asyncio
 import json
 
 from config import task_env
@@ -24,9 +23,32 @@ from ingest.enrichment import resolve_entities, detect_communities, summarize_co
 
 
 @task_env.task
-def ingest_pipeline(filenames: list[str], pdf_bytes_b64: list[str]) -> str:
+async def process_pdf(source_doc: str, pdf_bytes_b64: str) -> list[str]:
+    """
+    Parse, chunk, and extract entities for a single PDF.
+
+    Args:
+        source_doc:     Filename used as the Document node name in Neo4j.
+        pdf_bytes_b64:  Base64-encoded PDF bytes.
+
+    Returns:
+        List of extraction-result JSON strings — one per chunk.
+    """
+    chunks_json = parse_and_chunk(source_doc=source_doc, pdf_bytes_b64=pdf_bytes_b64)
+    results = []
+    for chunk in json.loads(chunks_json):
+        results.append(extract_entities(chunk_json=json.dumps(chunk)))
+    return results
+
+
+@task_env.task
+async def ingest_pipeline(filenames: list[str], pdf_bytes_b64: list[str]) -> str:
     """
     Full GraphRAG ingest pipeline.
+
+    Fans out process_pdf in parallel (one Union task per PDF), then runs
+    load_graph → create_vector_index → resolve_entities →
+    detect_communities → summarize_communities sequentially.
 
     Args:
         filenames:     PDF filenames — used as Document node names in Neo4j.
@@ -35,13 +57,16 @@ def ingest_pipeline(filenames: list[str], pdf_bytes_b64: list[str]) -> str:
     Returns:
         JSON summary — {communities_summarized}.
     """
-    all_extraction_results = []
-    for name, enc in zip(filenames, pdf_bytes_b64):
-        chunks_json = parse_and_chunk(source_doc=name, pdf_bytes_b64=enc)
-        for chunk in json.loads(chunks_json):
-            result = extract_entities(chunk_json=json.dumps(chunk))
-            all_extraction_results.append(result)
+    # Parallel fan-out — one process_pdf task per PDF
+    per_pdf_results = await asyncio.gather(*[
+        process_pdf(source_doc=name, pdf_bytes_b64=enc)
+        for name, enc in zip(filenames, pdf_bytes_b64)
+    ])
 
+    # Flatten list-of-lists into a single extraction result list
+    all_extraction_results = [r for pdf_results in per_pdf_results for r in pdf_results]
+
+    # Sequential graph operations
     load_graph(extraction_results=all_extraction_results)
     create_vector_index()
     resolve_entities()

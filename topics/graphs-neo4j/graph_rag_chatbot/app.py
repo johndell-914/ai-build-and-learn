@@ -13,6 +13,7 @@ Deploy to Union:
 """
 
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -23,6 +24,34 @@ import gradio as gr
 
 import config    # loads .env and calls flyte.init() for the right backend
 import workflows  # imported at module level so flyte deploy bundles workflows
+
+
+def _remote():
+    """Return a UnionRemote configured for the current backend."""
+    from flytekit.configuration import Config, PlatformConfig
+    from union.remote import UnionRemote
+
+    if os.getenv("FLYTE_BACKEND") == "cluster":
+        cfg = Config(platform=PlatformConfig(endpoint="host.docker.internal:8090", insecure=True))
+    else:
+        cfg = Config(platform=PlatformConfig(endpoint=config.UNION_ENDPOINT))
+
+    return UnionRemote(
+        config=cfg,
+        default_project=config.UNION_PROJECT,
+        default_domain=config.UNION_DOMAIN,
+    )
+
+
+def _execution_url(execution) -> str:
+    try:
+        name = execution.id.name
+        return (
+            f"https://{config.UNION_ENDPOINT}/v2/domain/{config.UNION_DOMAIN}"
+            f"/project/{config.UNION_PROJECT}/executions/{name}"
+        )
+    except Exception:
+        return ""
 
 _CSS = """
 /* ── Mode badges ──────────────────────────────────────────────────────── */
@@ -185,13 +214,15 @@ def run_ingest(uploaded_files):
 
     try:
         from workflows import ingest_pipeline
-        run = flyte.run(ingest_pipeline, data_dir=str(_DATA_DIR))
-        link = build_run_link(run)
+        remote = _remote()
+        execution = remote.execute(ingest_pipeline, inputs={"data_dir": str(_DATA_DIR)})
+        url = _execution_url(execution)
+        link = f'<a href="{url}" target="_blank">🔗 View run on Union</a>' if url else ""
 
         yield emit("⏳ Running on Union — waiting for results..."), link
 
-        run.wait()
-        summary = json.loads(run.outputs().o0)
+        remote.wait(execution)
+        summary = json.loads(execution.outputs["o0"])
 
         yield emit(
             f"\n✅ Ingest complete!\n"
@@ -215,9 +246,10 @@ def chat(question, history):
 
     try:
         from workflows import query_pipeline
-        run = flyte.run(query_pipeline, question=question)
-        run.wait()
-        result = json.loads(run.outputs().o0)
+        remote = _remote()
+        execution = remote.execute(query_pipeline, inputs={"question": question})
+        remote.wait(execution)
+        result = json.loads(execution.outputs["o0"])
 
         answer   = result["answer"]
         mode     = result.get("retrieval_mode", "hybrid")

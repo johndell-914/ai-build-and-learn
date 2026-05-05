@@ -3,7 +3,7 @@ app.py — Gradio UI for the Everstorm GraphRAG chatbot.
 
 Two tabs:
   Ingest Graph  — kick off ingest_pipeline on Union (reads PDFs from data/)
-  Chat          — ask questions, see answer + retrieval mode + sources + entities
+  Chat          — ask questions, see answer + retrieval mode badge + sources + entities
 
 Run locally:
     python app.py
@@ -21,11 +21,9 @@ import flyte
 import flyte.app
 import gradio as gr
 
-import config    # loads .env
-import workflows  # imported at module level so union register bundles all tasks
+import config    # loads .env and calls flyte.init() for the right backend
+import workflows  # imported at module level so flyte deploy bundles workflows
 
-# CSS inlined so the deployed app bundle (Python files only) doesn't need a
-# separate file on disk.
 _CSS = """
 /* ── Mode badges ──────────────────────────────────────────────────────── */
 .mode-badge {
@@ -40,28 +38,6 @@ _CSS = """
 .mode-hybrid    { background: #dbeafe; color: #1e40af; }
 .mode-entity    { background: #ede9fe; color: #5b21b6; }
 .mode-community { background: #d1fae5; color: #065f46; }
-
-/* ── Metadata panel ───────────────────────────────────────────────────── */
-.meta-panel {
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 10px;
-    padding: 14px 16px;
-    margin-top: 8px;
-    font-size: 0.88em;
-}
-.meta-label-gap { margin-top: 12px; }
-.meta-label {
-    font-size: 0.75em;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--body-text-color-subdued, #888);
-    margin-bottom: 6px;
-}
-.meta-item {
-    padding: 3px 0;
-    color: var(--body-text-color, #e0e0e0);
-}
 
 /* ── Source accordion ─────────────────────────────────────────────────── */
 .source-accordion {
@@ -84,6 +60,30 @@ _CSS = """
     padding: 6px 12px;
     border-top: 1px solid rgba(255,255,255,0.07);
     color: var(--body-text-color-subdued, #aaa);
+}
+
+/* ── Entity list ──────────────────────────────────────────────────────── */
+.entity-accordion {
+    margin-top: 6px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.88em;
+}
+.entity-accordion summary {
+    padding: 6px 12px;
+    background: rgba(255,255,255,0.07);
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--body-text-color, #e0e0e0);
+    list-style: none;
+}
+.entity-accordion summary:hover { background: rgba(255,255,255,0.13); }
+.entity-item {
+    padding: 4px 12px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    color: var(--body-text-color-subdued, #aaa);
+    font-size: 0.85em;
 }
 
 /* ── Run link ─────────────────────────────────────────────────────────── */
@@ -116,7 +116,7 @@ serving_env = flyte.app.AppEnvironment(
         flyte.Secret(key="NEO4J_USERNAME",    as_env_var="NEO4J_USERNAME"),
         flyte.Secret(key="NEO4J_PASSWORD",    as_env_var="NEO4J_PASSWORD"),
     ],
-    env_vars={"FLYTE_BACKEND": "cluster", "APP_VERSION": "1"},
+    env_vars={"FLYTE_BACKEND": "cluster"},
     port=7860,
     resources=flyte.Resources(cpu=2, memory="4Gi"),
 )
@@ -128,34 +128,27 @@ def _mode_badge(mode: str) -> str:
     return f'<span class="mode-badge mode-{mode}">{label}</span>'
 
 
-def build_meta_panel(result: dict) -> str:
-    mode = result.get("retrieval_mode", "hybrid")
-    sources = result.get("sources", [])
-    entities = result.get("entities_used", [])
-
-    source_items = "".join(
+def build_sources_accordion(sources: list) -> str:
+    items = "".join(
         f'<div class="source-item">{s}</div>' for s in sources
-    ) or '<div class="source-item">—</div>'
-
-    entity_items = "".join(
-        f'<div class="meta-item">· {e}</div>' for e in entities
-    ) or '<div class="meta-item">—</div>'
-
-    sources_accordion = (
+    )
+    return (
         f'<details class="source-accordion">'
         f'<summary>📄 {len(sources)} source document(s)</summary>'
-        f'{source_items}'
+        f'{items}'
         f'</details>'
     )
 
+
+def build_entities_accordion(entities: list) -> str:
+    if not entities:
+        return ""
+    items = "".join(f'<div class="entity-item">· {e}</div>' for e in entities)
     return (
-        f'<div class="meta-panel">'
-        f'  <div class="meta-label">Retrieval Mode</div>'
-        f'  {_mode_badge(mode)}'
-        f'  <div class="meta-label meta-label-gap">Entities Used</div>'
-        f'  {entity_items}'
-        f'  {sources_accordion}'
-        f'</div>'
+        f'<details class="entity-accordion">'
+        f'<summary>🔗 {len(entities)} entity/entities used</summary>'
+        f'{items}'
+        f'</details>'
     )
 
 
@@ -178,14 +171,12 @@ def run_ingest(uploaded_files):
         log_lines.append(msg)
         return "\n".join(log_lines)
 
-    # Copy any uploaded PDFs into data/ so the pipeline can read them
     if uploaded_files:
         _DATA_DIR.mkdir(exist_ok=True)
         yield emit(f"📂 Copying {len(uploaded_files)} uploaded file(s) to data/..."), ""
         for file_path in uploaded_files:
             src = Path(file_path)
-            dest = _DATA_DIR / src.name
-            shutil.copy2(src, dest)
+            shutil.copy2(src, _DATA_DIR / src.name)
             yield emit(f"   ✅ {src.name}"), ""
     else:
         yield emit("📂 Using PDFs already in data/..."), ""
@@ -218,7 +209,7 @@ def chat(question, history):
     history = list(history or [])
 
     if not question:
-        return history, ""
+        return history
 
     history.append({"role": "user", "content": question})
 
@@ -228,12 +219,18 @@ def chat(question, history):
         run.wait()
         result = json.loads(run.outputs().o0)
 
-        answer = result["answer"]
-        meta = build_meta_panel(result)
+        answer   = result["answer"]
+        mode     = result.get("retrieval_mode", "hybrid")
+        sources  = result.get("sources", [])
+        entities = result.get("entities_used", [])
+
+        badge    = _mode_badge(mode)
+        src_html = build_sources_accordion(sources) if sources else ""
+        ent_html = build_entities_accordion(entities)
 
         history.append({
             "role": "assistant",
-            "content": f"{answer}\n\n{meta}",
+            "content": f"{answer}\n\n{badge}{src_html}{ent_html}",
         })
 
     except Exception as exc:
@@ -242,13 +239,13 @@ def chat(question, history):
             "content": f"❌ Error: {exc}",
         })
 
-    return history, ""
+    return history
 
 
 # ── UI layout ──────────────────────────────────────────────────────────────────
 
 def build_ui() -> gr.Blocks:
-    with gr.Blocks(title="Everstorm GraphRAG Chatbot", css=_CSS) as app:
+    with gr.Blocks(title="Everstorm GraphRAG Chatbot") as app:
 
         gr.Markdown("# Everstorm Outfitters — GraphRAG Chatbot")
         gr.Markdown(
@@ -260,12 +257,6 @@ def build_ui() -> gr.Blocks:
             # ── Tab 1: Ingest ──────────────────────────────────────────────────
             with gr.Tab("📥 Ingest Graph"):
 
-                gr.Markdown(
-                    "Upload PDFs to add them to the graph, or leave empty to use "
-                    "the PDFs already in `data/`. Extracts entities and relationships, "
-                    "writes the graph to Neo4j AuraDB, and generates community summaries."
-                )
-
                 with gr.Row():
                     with gr.Column(scale=1, min_width=220, elem_classes=["tab-sidebar"]):
                         file_upload = gr.File(
@@ -275,11 +266,16 @@ def build_ui() -> gr.Blocks:
                         )
 
                     with gr.Column(scale=4):
+                        gr.Markdown(
+                            "Upload PDFs to add them to the graph, or leave empty to "
+                            "use PDFs already in `data/`. Extracts entities and relationships, "
+                            "writes the graph to Neo4j AuraDB, and generates community summaries."
+                        )
                         ingest_btn = gr.Button("🚀 Run Ingest on Union", variant="primary")
                         run_link = gr.HTML(elem_classes=["run-link"])
                         status_log = gr.Textbox(
                             label="Status Log",
-                            lines=12,
+                            lines=14,
                             interactive=False,
                             elem_classes=["log-box"],
                         )
@@ -294,38 +290,38 @@ def build_ui() -> gr.Blocks:
             with gr.Tab("💬 Chat"):
 
                 with gr.Row():
-                    with gr.Column(scale=3):
-                        chatbot = gr.Chatbot(
-                            label="Everstorm GraphRAG",
-                            height=500,
-                            type="messages",
-                        )
-                        question_input = gr.Textbox(
-                            placeholder="Ask anything about Everstorm Outfitters...",
-                            label="Question",
-                            submit_btn=True,
-                        )
-                        clear_btn = gr.Button("🗑 Clear")
-
-                    with gr.Column(scale=1, elem_classes=["tab-sidebar"]):
-                        gr.Markdown("**How it works**")
+                    with gr.Column(scale=1, min_width=220, elem_classes=["tab-sidebar"]):
                         gr.Markdown(
-                            "Each question is automatically routed to the best "
-                            "retrieval strategy:\n\n"
+                            "**Retrieval modes**\n\n"
                             "🔵 **Hybrid** — facts, rules, definitions\n\n"
                             "🟣 **Entity** — relationships between named things\n\n"
                             "🟢 **Community** — broad themes and programs"
                         )
+                        clear_btn = gr.Button("🗑 Clear")
 
-                question_input.submit(
+                    with gr.Column(scale=4):
+                        query_input = gr.Textbox(
+                            placeholder="Ask anything about Everstorm Outfitters...",
+                            label="Question",
+                            submit_btn=True,
+                        )
+                        chatbot = gr.Chatbot(
+                            label="Everstorm GraphRAG",
+                            height=480,
+                        )
+
+                query_input.submit(
                     fn=chat,
-                    inputs=[question_input, chatbot],
-                    outputs=[chatbot, question_input],
+                    inputs=[query_input, chatbot],
+                    outputs=[chatbot],
+                ).then(
+                    fn=lambda: "",
+                    outputs=[query_input],
                 )
 
                 clear_btn.click(
                     fn=lambda: ([], ""),
-                    outputs=[chatbot, question_input],
+                    outputs=[chatbot, query_input],
                 )
 
     return app
@@ -335,14 +331,18 @@ def build_ui() -> gr.Blocks:
 
 @serving_env.server
 def _cluster_server():
-    build_ui().queue().launch(server_name="0.0.0.0", server_port=7860, share=False)
+    build_ui().launch(server_name="0.0.0.0", server_port=7860, share=False, css=_CSS)
 
 
-# ── Local entry point ──────────────────────────────────────────────────────────
+# ── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     if "--deploy" in sys.argv:
-        app = flyte.serve(serving_env)
-        print(f"App URL: {app.url}")
+        try:
+            app = flyte.serve(serving_env)
+            print(f"App URL: {app.url}")
+        except Exception:
+            print("App deployed — check console for status:")
+            print("https://tryv2.hosted.unionai.cloud/v2/domain/development/project/dellenbaugh/apps/everstorm-graphrag-chatbot")
     else:
-        build_ui().launch(server_name="0.0.0.0", server_port=7860, share=False)
+        build_ui().launch(server_name="0.0.0.0", server_port=7860, share=False, css=_CSS)

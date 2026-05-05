@@ -10,9 +10,27 @@ Secret resolution order:
 """
 
 import os
+
+import flyte
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# ── Flyte / Union backend ─────────────────────────────────────────────────────
+
+UNION_ORG      = "tryv2"
+UNION_ENDPOINT = f"{UNION_ORG}.hosted.unionai.cloud"
+UNION_PROJECT  = "dellenbaugh"
+UNION_DOMAIN   = "development"
+
+BACKEND = os.getenv("FLYTE_BACKEND", "local")
+
+if BACKEND == "union":
+    flyte.init(endpoint=UNION_ENDPOINT, project=UNION_PROJECT, domain=UNION_DOMAIN)
+elif BACKEND == "cluster":
+    flyte.init_in_cluster(org=UNION_ORG, project=UNION_PROJECT, domain=UNION_DOMAIN)
+else:
+    flyte.init(local_persistence=True)
 
 
 def _secret(key: str) -> str:

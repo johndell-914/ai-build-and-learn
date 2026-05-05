@@ -1,6 +1,7 @@
 name: Build GraphRAG images
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:

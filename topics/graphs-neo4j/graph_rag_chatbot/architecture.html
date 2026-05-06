@@ -49,7 +49,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .node-sub{color:var(--muted);font-size:.72em;line-height:1.4;}
 .node-label{font-size:.62em;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-top:8px;}
 
-.cluster{border:1.5px dashed var(--border2);border-radius:10px;padding:14px;transition:border-color .35s;}
+.cluster{border:1.5px dashed var(--border2);border-radius:10px;padding:14px;transition:border-color .35s;align-self:center;}
 .cluster.active{border-color:var(--accent);}
 .cluster-hdr{font-size:.65em;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
 .section-label{font-size:.62em;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted2);margin:8px 0 6px 2px;}
@@ -65,7 +65,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .tbadge{flex-shrink:0;background:var(--border);color:var(--muted);font-size:.62em;font-weight:700;padding:2px 7px;border-radius:8px;transition:background .35s,color .35s;white-space:nowrap;}
 .task.active .tbadge{background:var(--hi);color:#000;}
 
-.dots{display:flex;justify-content:center;gap:6px;margin-bottom:14px;}
+.nav-row{display:flex;justify-content:center;align-items:center;gap:12px;max-width:1140px;margin:0 auto 16px;}
+.nav-row .btn{padding:6px 16px;font-size:.78em;}
+.dots{display:flex;gap:6px;align-items:center;}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--border2);cursor:pointer;transition:background .3s,transform .3s;}
 .dot.cur{background:var(--hi);transform:scale(1.4);}
 .dot.past{background:var(--accent);}
@@ -87,7 +89,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .step-code .str{color:#a5d6ff;}
 .step-code .cm{color:#8b949e;font-style:italic;}
 
-.controls{display:flex;justify-content:center;align-items:center;gap:14px;max-width:1140px;margin:0 auto;}
 .btn{padding:9px 26px;border-radius:7px;border:none;font-weight:700;font-size:.85em;cursor:pointer;transition:background .2s;}
 .btn-p{background:var(--hi);color:#000;}
 .btn-p:hover:not(:disabled){background:#c88a00;}
@@ -144,8 +145,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="cluster" id="n-union">
       <div class="cluster-hdr">☁️ Union Cluster</div>
 
-      <div class="section-label">Ingest</div>
-      <div class="task" id="n-ingest-pipe">
+      <div class="section-label ingest-only">Ingest</div>
+      <div class="task ingest-only" id="n-ingest-pipe">
         <div class="task-ico">🔀</div>
         <div class="task-body">
           <div class="task-name">ingest_pipeline</div>
@@ -153,7 +154,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <span class="tbadge">orchestrator</span>
       </div>
-      <div class="task" id="n-process-pdf">
+      <div class="task ingest-only" id="n-process-pdf">
         <div class="task-ico">📄</div>
         <div class="task-body">
           <div class="task-name">process_pdf</div>
@@ -161,7 +162,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <span class="tbadge">×15 parallel</span>
       </div>
-      <div class="task" id="n-load-graph">
+      <div class="task ingest-only" id="n-load-graph">
         <div class="task-ico">🗂️</div>
         <div class="task-body">
           <div class="task-name">load_graph</div>
@@ -169,7 +170,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <span class="tbadge">step 1/5</span>
       </div>
-      <div class="task" id="n-vec-index">
+      <div class="task ingest-only" id="n-vec-index">
         <div class="task-ico">🔢</div>
         <div class="task-body">
           <div class="task-name">create_vector_index</div>
@@ -177,7 +178,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <span class="tbadge">step 2/5</span>
       </div>
-      <div class="task" id="n-resolve">
+      <div class="task ingest-only" id="n-resolve">
         <div class="task-ico">🔗</div>
         <div class="task-body">
           <div class="task-name">resolve_entities</div>
@@ -185,7 +186,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <span class="tbadge">step 3/5</span>
       </div>
-      <div class="task" id="n-detect">
+      <div class="task ingest-only" id="n-detect">
         <div class="task-ico">🕸️</div>
         <div class="task-body">
           <div class="task-name">detect_communities</div>
@@ -193,7 +194,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <span class="tbadge">step 4/5</span>
       </div>
-      <div class="task" id="n-summarize">
+      <div class="task ingest-only" id="n-summarize">
         <div class="task-ico">📝</div>
         <div class="task-body">
           <div class="task-name">summarize_communities</div>
@@ -202,10 +203,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <span class="tbadge">step 5/5</span>
       </div>
 
-      <div class="cluster-div"></div>
-      <div class="section-label">Query</div>
+      <div class="cluster-div query-only"></div>
+      <div class="section-label query-only">Query</div>
 
-      <div class="task" id="n-query-pipe">
+      <div class="task query-only" id="n-query-pipe">
         <div class="task-ico">🔀</div>
         <div class="task-body">
           <div class="task-name">query_pipeline</div>
@@ -213,7 +214,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <span class="tbadge">orchestrator</span>
       </div>
-      <div class="task" id="n-route">
+      <div class="task query-only" id="n-route">
         <div class="task-ico">🧭</div>
         <div class="task-body">
           <div class="task-name">route_query</div>
@@ -221,7 +222,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <span class="tbadge">step 1/3</span>
       </div>
-      <div class="task" id="n-retrieve">
+      <div class="task query-only" id="n-retrieve">
         <div class="task-ico">🔍</div>
         <div class="task-body">
           <div class="task-name">hybrid / entity / community _retrieve</div>
@@ -229,7 +230,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <span class="tbadge">step 2/3</span>
       </div>
-      <div class="task" id="n-generate">
+      <div class="task query-only" id="n-generate">
         <div class="task-ico">✍️</div>
         <div class="task-body">
           <div class="task-name">generate</div>
@@ -264,7 +265,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 </div>
 
-<div class="dots" id="dots"></div>
+<div class="nav-row">
+  <button class="btn btn-s" id="btn-prev" onclick="prev()">← Prev</button>
+  <div class="dots" id="dots"></div>
+  <button class="btn btn-p" id="btn-next" onclick="next()">Next →</button>
+  <span class="step-ct" id="s-ct">1 / 11</span>
+</div>
 
 <div class="step-panel" id="step-panel">
   <div class="step-top">
@@ -285,11 +291,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 </div>
 
-<div class="controls">
-  <button class="btn btn-s" id="btn-prev" onclick="prev()">← Prev</button>
-  <span class="step-ct" id="s-ct">1 / 11</span>
-  <button class="btn btn-p" id="btn-next" onclick="next()">Next →</button>
-</div>
 <p class="hint">← → arrow keys to navigate between steps</p>
 
 <script>
@@ -740,10 +741,16 @@ function buildPath(def) {
   return `M ${p1.x} ${p1.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${p2.x} ${p2.y}`;
 }
 
+function isVisible(id) {
+  const el = document.getElementById(id);
+  return el ? window.getComputedStyle(el).display !== 'none' : false;
+}
+
 function drawArrows() {
   const svg = document.getElementById('svg-arrows');
   [...svg.querySelectorAll('.arrow-path')].forEach(p => p.remove());
   ARROWS.forEach(def => {
+    if (!isVisible(def.from) || !isVisible(def.to)) return;
     try {
       const path = document.createElementNS('http://www.w3.org/2000/svg','path');
       path.setAttribute('id', 'a-' + def.id);
@@ -824,7 +831,11 @@ function setFlow(f) {
   flow=f; step=0;
   document.getElementById('tab-ingest').classList.toggle('active', f==='ingest');
   document.getElementById('tab-query').classList.toggle('active',  f==='query');
+  const showIngest = f === 'ingest';
+  document.querySelectorAll('.ingest-only').forEach(el => el.style.display = showIngest ? '' : 'none');
+  document.querySelectorAll('.query-only').forEach(el  => el.style.display = showIngest ? 'none' : '');
   render();
+  requestAnimationFrame(drawArrows);
 }
 
 document.addEventListener('keydown', e => {
@@ -833,7 +844,7 @@ document.addEventListener('keydown', e => {
 });
 
 window.addEventListener('load', () => {
-  render();
+  setFlow('ingest');
   requestAnimationFrame(() => { drawArrows(); render(); });
 });
 window.addEventListener('resize', () => { drawArrows(); });

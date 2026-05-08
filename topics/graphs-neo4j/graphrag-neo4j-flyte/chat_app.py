@@ -148,6 +148,8 @@ PANEL_CSS = """
 .gr-rank { font-weight: 600; }
 .gr-score { font-variant-numeric: tabular-nums; }
 .gr-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 4px; }
+.gr-title a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--body-text-color-subdued); }
+.gr-title a:hover { color: var(--color-accent); border-bottom-color: var(--color-accent); }
 .gr-snippet {
     font-size: 0.88rem;
     line-height: 1.4;
@@ -187,13 +189,18 @@ def _render_panel(papers: list[dict], edges: list[dict]) -> str:
             if len(snippet) > 280:
                 snippet = snippet[:280].rsplit(" ", 1)[0] + "…"
             title = (p.get("title") or p.get("id") or "?").replace("<", "&lt;").replace(">", "&gt;")
+            url = (p.get("url") or "").replace('"', "&quot;")
+            title_html = (
+                f'<a href="{url}" target="_blank" rel="noopener">{title}</a>'
+                if url else title
+            )
             cards.append(
                 '<div class="gr-card">'
                 '<div class="gr-card-meta">'
                 f'<span class="gr-rank">#{i} · paper {p.get("id", "?")} · {p.get("year", "?")}</span>'
                 f'<span class="gr-score">score {score_text}</span>'
                 '</div>'
-                f'<div class="gr-title">{title}</div>'
+                f'<div class="gr-title">{title_html}</div>'
                 f'<div class="gr-snippet">{snippet}</div>'
                 f'<div class="gr-source">via {source}</div>'
                 '</div>'
@@ -319,13 +326,14 @@ def _run(
             CALL db.index.vector.queryNodes('paper_embedding_idx', $k, $vec)
             YIELD node, score
             RETURN node.id AS id, node.title AS title,
-                   node.abstract AS abstract, node.year AS year, score
+                   node.abstract AS abstract, node.year AS year,
+                   node.url AS url, score
             """,
             {"k": k, "vec": vec},
         )
         return [
             {"id": r[0], "title": r[1], "abstract": r[2], "year": r[3],
-             "score": float(r[4]), "source": "vector"}
+             "url": r[4], "score": float(r[5]), "source": "vector"}
             for r in rows
         ]
 
@@ -387,7 +395,7 @@ def _run(
             WITH other, shared_cats, count(r) AS in_cites
             RETURN other.id AS id, other.title AS title,
                    other.abstract AS abstract, other.year AS year,
-                   shared_cats, in_cites
+                   other.url AS url, shared_cats, in_cites
             ORDER BY in_cites DESC, shared_cats DESC
             LIMIT $k
             """,
@@ -395,8 +403,9 @@ def _run(
         )
         return [
             {"id": r[0], "title": r[1], "abstract": r[2], "year": r[3],
-             "score": float(r[5]),  # in_cites count, displayed as score
-             "source": f"graph (cited {r[5]}x, {r[4]} shared cats)"}
+             "url": r[4],
+             "score": float(r[6]),  # in_cites count, displayed as score
+             "source": f"graph (cited {r[6]}x, {r[5]} shared cats)"}
             for r in rows
         ]
 

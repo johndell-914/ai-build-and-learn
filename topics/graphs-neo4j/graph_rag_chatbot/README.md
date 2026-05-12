@@ -97,6 +97,7 @@ graph_rag_chatbot/
 │
 ├── Dockerfile           Task image (gte-small baked in, no runtime download)
 ├── Dockerfile.app       App serving image
+├── build-images.yml     Manual GitHub Actions workflow — copy to .github/workflows/ to activate
 ├── architecture.html    Interactive architecture walkthrough
 ├── RESEARCH.md          Design decisions, schema, retrieval patterns
 ├── requirements.txt
@@ -158,7 +159,7 @@ Open `http://localhost:7860`.
 
 ### Union (tasks run on the cluster)
 
-Build and push both Docker images first (or let the GitHub Action do it on push):
+Build and push both Docker images first (or run `build-images.yml` manually from GitHub Actions):
 
 ```bash
 docker build -f Dockerfile     -t johndellenbaugh/graphrag-task:latest . && docker push johndellenbaugh/graphrag-task:latest
@@ -212,9 +213,9 @@ Enrichment steps (resolve, detect, summarize) run sequentially after.
 
 ## CI/CD
 
-`.github/workflows/build-graphrag-images.yml` builds and pushes both Docker
-images to Docker Hub on every push to `main` that touches a Dockerfile or
-any `.py` file in this directory.
+`build-images.yml` builds and pushes both Docker images to Docker Hub.
+It is triggered manually (`workflow_dispatch` only) — copy it to
+`.github/workflows/` in your fork and run it from the GitHub Actions tab.
 
 ---
 

@@ -2,12 +2,6 @@ name: Build GraphRAG images
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "topics/graphs-neo4j/graph_rag_chatbot/Dockerfile"
-      - "topics/graphs-neo4j/graph_rag_chatbot/Dockerfile.app"
-      - "topics/graphs-neo4j/graph_rag_chatbot/**/*.py"
 
 jobs:
   build-task-image:

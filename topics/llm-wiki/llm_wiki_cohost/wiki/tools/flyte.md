@@ -21,6 +21,15 @@ FastMCP server in a Starlette ASGI app and deploys it as a persistent service.
 Once deployed, clients update `MCP_SERVER_URL` in `.env` to point at the remote
 URL — no code changes needed since both clients read from that env var.
 
-This was the deployment pattern for the server side only. Later weeks use Flyte
-more heavily for task orchestration (fan-out pipelines, parallel PDF processing,
-etc.).
+This was the deployment pattern for the server side only.
+
+### Week 2 — Agentic Search with Tavily (2026-04-03)
+
+Used for task orchestration in `langgraph_agent_research/`. Each `research_topic`
+runs as a separate Flyte task with its own container, resources, and
+observability. LangGraph's `Send` API fans out to the Flyte task — on a cluster,
+each `Send` becomes a separate container running a full ReAct agent.
+
+The pipeline graph accepts the Flyte task as a parameter, keeping LangGraph
+(logic) and Flyte (compute) cleanly separated. This is the first use of Flyte
+for parallel task fan-out rather than simple app deployment.

@@ -26,6 +26,25 @@ The data analysis demo showed a multi-step agent: the model chains
 load → filter → aggregate → chart across multiple tool calls in one session,
 with server-side state persisting between calls.
 
+### Week 2 — Agentic Search with Tavily (2026-04-03)
+
+Agents appeared in two forms, both as web research assistants:
+
+**Claude + FastMCP ReAct agent** — A manual ReAct loop where the agent chooses
+between `tavily_search`, `tavily_extract`, and `tavily_crawl` based on the
+query. The agent's system prompt specifies when to use each tool and quality
+standards (cite sources, cross-verify claims, iterate on poor results). The
+loop is visible in the console — each tool call is printed.
+
+**LangGraph ReAct sub-agent** — Each sub-topic researcher in the pipeline is a
+LangGraph ReAct subgraph running inside a Flyte task. The subgraph calls
+`web_search` (Tavily) in a loop until it has enough information or reaches
+`max_searches`. Multiple researchers run in parallel across the fan-out.
+
+Key new idea: a system prompt as a first-class artifact. `system_prompt.py` is
+a standalone module imported by `agent.py` — the agent's strategy (which tool
+to use when, quality standards) is explicit and separately maintainable.
+
 ## Open questions
 
 - What agent frameworks does the series explore beyond the Agents SDK? (LangGraph, custom loops?)

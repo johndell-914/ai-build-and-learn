@@ -34,6 +34,26 @@ The stateful data server showed that tool calls are not inherently stateless —
 server-side state can persist across a conversation turn, enabling multi-step
 workflows where each tool call builds on the previous one.
 
+### Week 2 — Agentic Search with Tavily (2026-04-03)
+
+Tool use appeared in two integration styles:
+
+**MCP tools (Claude agent).** Same pattern as week 1 — FastMCP server exposes
+Tavily tools, agent discovers and calls them via the MCP protocol. The agent's
+system prompt explicitly guides which tool to call in each situation (search
+for discovery, extract for full content, crawl for documentation). Shows that
+tool selection strategy belongs in the prompt, not the framework.
+
+**LangChain `@tool` (LangGraph pipeline).** Tavily wrapped as a LangChain-
+compatible tool so LangGraph's agent node can call it natively. A different
+registration pattern than MCP — no separate server process, tool is a Python
+function decorated with `@tool`. Simpler for a single-agent, single-pipeline
+use case where portability across clients isn't needed.
+
+The contrast with week 1 is instructive: MCP pays off when the tool server is
+shared across multiple clients or needs to be hosted independently. `@tool`
+is sufficient when one framework owns everything.
+
 ## Open questions
 
 - How does tool use differ across providers (OpenAI function calling vs

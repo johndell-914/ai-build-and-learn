@@ -24,6 +24,19 @@ SSE transport for persistent multi-client connections.
 filtering, aggregating, and charting datasets. State (loaded datasets) persists
 across tool calls within a session.
 
+### Week 2 — Agentic Search with Tavily (2026-04-03)
+
+Reused as the tool server layer for the Claude web research agent
+(`fastmcp_agent_tavily/`). Three Tavily tools exposed on port 8001:
+`tavily_search`, `tavily_extract`, `tavily_crawl`. Same SSE transport and
+decorator pattern as week 1 — only the tools and port changed.
+
+Confirms the pattern from week 1: FastMCP is a stable, reusable tool layer.
+The agent (client side) changes across projects; the server pattern stays the
+same.
+
+---
+
 Core pattern:
 ```python
 from fastmcp import FastMCP

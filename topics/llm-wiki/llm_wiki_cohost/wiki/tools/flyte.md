@@ -1,6 +1,6 @@
 ---
 title: Flyte / Union
-weeks: [mcp]
+weeks: [mcp, tavily, openenv, autoresearch, gemma4, vectorstore, graphs-neo4j]
 ---
 
 Flyte is an open-source workflow orchestration platform. Union is the managed
@@ -65,6 +65,50 @@ Local-to-Union porting surfaced new constraints: cluster containers can't read
 local file paths (solution: base64-encode image bytes, pass as `str`), Flyte
 doesn't natively support `bytes` task inputs (falls back to PickleFile — use
 `str` instead), and GCP credentials must be Union secrets not local `.env`.
+
+### Week 7 — Graph Data with Neo4j (2026-05-08)
+
+New pattern: **database as a Flyte `AppEnvironment`**. Neo4j 5 is deployed
+alongside the chat UI as a persistent always-on service (`replicas=(1,1)`).
+`from_dockerfile` is used instead of `from_base` to avoid the Flyte image
+builder's `USER flyte` footer, which breaks the official Neo4j container image.
+
+Ingest pipeline uses `asyncio.gather` to fan out `process_pdf` across all 15
+PDFs in parallel (same pattern as Gemma 4 week). Post-fan-out enrichment steps
+(resolve entities → detect communities → summarize) run sequentially.
+
+**Snapshot/restore via `flyte.io.Dir`** — Neo4j has no persistent volume by
+default on the devbox. `snapshot_neo4j` dumps nodes + edges + embeddings to a
+`Dir` in rustfs (survives `flyte stop/start devbox`); `restore_neo4j` replays
+via HTTP MERGE. Online snapshot over HTTP — no daemon stop needed, works on
+community edition.
+
+### Week 6 — Vector Stores (2026-05-01)
+
+Two roles: pipeline orchestration and app deployment, both in the same week.
+
+**Pipeline orchestration (`rag-chroma-flyte/`, `vector_rag_chatbot/`)** — RAG
+ingest and query run as Flyte tasks. `vector_rag_chatbot/` fans out one
+`load_and_chunk_task` per PDF in parallel; `embed_and_index_task` fires after
+all chunks merge. `cache="auto"` on `load_and_chunk_task` makes re-ingesting an
+unchanged PDF a free cache hit.
+
+Key artifact pattern new this week: `flyte.io.Dir` as a pipeline output. The
+Chroma persist directory (SQLite3 + parquet shards) is snapshotted as a `Dir`
+artifact; the chat app mounts it via `RunOutput(type="directory", task_name=…)`.
+The index is a first-class Flyte artifact, not a side-effect.
+
+**App deployment (`vector_rag_chatbot/`)** — Gradio chat deployed as a persistent
+Union service via `flyte.app.AppEnvironment`. Two separate images: task image
+(embedding model baked in, ~ML deps) and app image (Gradio + Flyte, minimal).
+The app image is intentionally thin — heavy work is delegated to task runs via
+`flyte.run()`. `run.wait()` blocks until completion; `run.outputs().o0` is then
+guaranteed non-None.
+
+Notable deployment issues resolved this week (documented in `RESEARCH.md`):
+Union console Secrets page broken (use CLI); `flyte create secret` silently
+does nothing on update (use new key name); `flyte deploy` bundler only packages
+`.py` files (inline CSS as a fallback string constant).
 
 ### Week 4 — AutoResearch (2026-04-17)
 

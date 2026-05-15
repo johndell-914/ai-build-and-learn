@@ -1,7 +1,7 @@
 ---
 title: Autonomous ML Research
 first_seen: topics/autoresearch/
-weeks: [autoresearch]
+weeks: [autoresearch, llm-wiki]
 ---
 
 A closed-loop agent pattern for running ML experiments unattended: the agent
@@ -44,6 +44,30 @@ tuning (Gemma's default) and window pattern exploration.
 The pattern generalizes past `train.py`. The same loop — fixed single-file
 edit surface, fixed budget, one measurable metric — can drive research in any
 domain where an agent can propose testable changes and measure an outcome.
+
+### Week 8 — LLM Wiki (2026-05-15)
+
+Karpathy's second contribution to the series. The LLM Wiki pattern is a
+different expression of the same underlying idea as AutoResearch: give the
+LLM a tight sandbox, a persistent artifact, and a schema that defines what
+"good work" looks like — then let it run.
+
+**AutoResearch:** sandbox = one `train.py` file; metric = `val_bpb`; schema =
+`program.md`; artifact = the improved training script + results log.
+
+**LLM Wiki:** sandbox = one wiki directory; metric = coverage + coherence;
+schema = `CLAUDE.md`; artifact = the compounding wiki itself.
+
+The structural parallel is exact. Both patterns: fixed single-artifact edit
+surface, measurable improvement criterion, natural language program, appendonly
+log. The difference is the domain — ML experiments vs. knowledge synthesis —
+and the human's role: AutoResearch runs overnight unattended; the LLM Wiki
+is interactive, with the human directing operations.
+
+Karpathy's insight across both: **constrained sandboxes make agents tractable**.
+An agent with an unbounded action space produces unpredictable results. An
+agent with a well-defined edit surface, a clear quality criterion, and a
+schema that specifies expected behavior produces consistent, improvable work.
 
 ## Open questions
 

@@ -2,8 +2,8 @@
 
 AI Build & Learn series wiki. Read this first on every query and lint pass.
 
-Last updated: 2026-05-12
-Pages: 5 topics · 12 concepts · 8 tools
+Last updated: 2026-05-15
+Pages: 8 topics · 18 concepts · 12 tools
 
 ---
 
@@ -13,6 +13,9 @@ Pages: 5 topics · 12 concepts · 8 tools
 - [OpenEnv — Environments for RL Training](topics/openenv.md) — 2026-04-10
 - [AutoResearch](topics/autoresearch.md) — 2026-04-17
 - [Gemma 4](topics/gemma4.md) — 2026-04-24
+- [Vector Stores](topics/vectorstore.md) — 2026-05-01
+- [Graph Data with Neo4j](topics/graphs-neo4j.md) — 2026-05-08
+- [Karpathy's LLM Wiki](topics/llm-wiki.md) — 2026-05-15
 
 ---
 
@@ -29,6 +32,11 @@ Pages: 5 topics · 12 concepts · 8 tools
 - [Multimodal LLMs](concepts/multimodal-llms.md)
 - [Long Context](concepts/long-context.md)
 - [Structured Output](concepts/structured-output.md)
+- [RAG](concepts/rag.md)
+- [Embeddings](concepts/embeddings.md)
+- [Agent Memory](concepts/agent-memory.md)
+- [Knowledge Graphs](concepts/knowledge-graphs.md)
+- [LLM Wiki Pattern](concepts/llm-wiki-pattern.md)
 
 ---
 
@@ -41,6 +49,10 @@ Pages: 5 topics · 12 concepts · 8 tools
 - [OpenEnv](tools/openenv.md)
 - [Ollama](tools/ollama.md)
 - [Vertex AI](tools/vertex-ai.md)
+- [Chroma](tools/chroma.md)
+- [pgvector](tools/pgvector.md)
+- [Neo4j](tools/neo4j.md)
+- [Claude Code](tools/claude-code.md)
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: Ollama
-weeks: [autoresearch]
+weeks: [autoresearch, gemma4, vectorstore]
 ---
 
 Local model serving platform. Runs open LLMs (Gemma 4, Qwen Coder, Llama, etc.)
@@ -14,6 +14,22 @@ Fix: `curl -s http://localhost:11434/api/generate -d '{"model":"<name>","keep_al
 to pin the model in VRAM indefinitely.
 
 ## Usage across the series
+
+### Week 6 — Vector Stores (2026-05-01)
+
+Used in `screen-context-harness/` as the vision LLM for captioning screenshots.
+Gemma 4 Vision (`gemma4:26b` default, swappable via `DEFAULT_MODEL`) receives
+a downsampled screenshot (max 768px) every 5 seconds and returns a one-sentence
+caption of the current app, file, or task.
+
+This is the first use of Ollama as a **multimodal perception loop** rather than
+a text-generation tool: the model runs in a background async task, not in
+response to a user message. Images are passed as base64 bytes — same pattern
+established in Gemma 4 week.
+
+The harness also uses Ollama for consolidation: every 60 seconds, a second
+Ollama call synthesizes the 12-caption rolling buffer into a "Context Outline."
+Two distinct LLM roles in one app, both served by the same local Ollama endpoint.
 
 ### Week 4 — AutoResearch (2026-04-17)
 

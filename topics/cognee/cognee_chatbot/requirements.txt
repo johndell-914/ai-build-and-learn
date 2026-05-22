@@ -1,6 +1,9 @@
 # Cognee with pgvector support
 cognee[postgres-binary]>=0.1.0
 
+# Local ONNX embeddings (no API key required)
+fastembed>=0.8.0
+
 # Anthropic (answer generation)
 anthropic>=0.40.0
 

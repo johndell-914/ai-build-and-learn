@@ -80,9 +80,9 @@ def configure_cognee() -> str:
     os.environ["LLM_API_KEY"]        = api_key
     os.environ["VECTOR_DB_PROVIDER"] = "pgvector"
 
-    # Local embeddings via sentence-transformers — no OpenAI key required
-    os.environ["EMBEDDING_PROVIDER"]   = "sentence_transformers"
-    os.environ["EMBEDDING_MODEL"]      = "sentence-transformers/all-MiniLM-L6-v2"
+    # Local ONNX embeddings via fastembed — no API key required
+    os.environ["EMBEDDING_PROVIDER"]   = "fastembed"
+    os.environ["EMBEDDING_MODEL"]      = "BAAI/bge-small-en-v1.5"
     os.environ["EMBEDDING_DIMENSIONS"] = "384"
 
     # Skip the embedding connection test on startup
@@ -98,6 +98,9 @@ def configure_cognee() -> str:
     os.environ["ENABLE_BACKEND_ACCESS_CONTROL"] = "false"
     os.environ["DB_PROVIDER"] = "postgres"
     os.environ["DATABASE_CONNECT_ARGS"] = '{"ssl": "require"}'
+
+    # Supabase Session Pooler caps at 15 connections; keep well under that.
+    os.environ["POOL_ARGS"] = '{"pool_size": 5, "max_overflow": 5}'
 
     return api_key
 

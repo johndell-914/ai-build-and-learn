@@ -120,6 +120,8 @@ flyte run pipeline.py memory_pipeline \
 
 `init_memory` makes an empty store, each `ingest_source` does `add` + `cognify`, and `query_memory` runs `search(SearchType.GRAPH_COMPLETION)`. The final output is the memory `Dir` (`flyte://flytesnacks/development/<run>/o0`).
 
+**Each `ingest_source` renders the knowledge graph in its Flyte report:** node/relationship counts, an interactive d3 force graph (cognee's `visualize_graph`, embedded as an iframe), and a static relationships table as a no-JS fallback. The interactive `graph.html` is also written into the output `Dir`, so every memory revision carries a snapshot of its graph. (The iframe loads d3 from a CDN, so it needs network when you view the report; the table always renders.)
+
 Compound onto a prior run instead of starting fresh:
 
 ```bash
@@ -141,7 +143,9 @@ python chat_app.py
 
 It seeds from the most recent `memory_pipeline` run via `RunOutput`. Run the pipeline first, or it cold-starts empty (then falls back to the HF snapshot if one exists). Pin a specific run with `MEMORY_RUN_NAME=<run> python chat_app.py`.
 
-Per turn: **recall** context from the graph (shown in the right panel) → stream Gemma's answer → **remember** the exchange. The status line shows store size and where memory was seeded from.
+Two tabs:
+- **💬 Chat** Per turn: **recall** context from the graph (shown in the right panel) → stream Gemma's answer → **remember** the exchange. The status line shows store size and where memory was seeded from.
+- **🕸 Graph** Click "Render graph" to draw the live store's knowledge graph — the same `visualize_graph` view the ingest pipeline puts in its report (interactive d3 + a relationships table). Re-render after chatting to watch the graph grow as `remember` writes new exchanges in.
 
 ## Demo flow for the stream
 
@@ -167,5 +171,5 @@ Verified locally against **cognee 1.1.0** on this aarch64 box: install, `fastemb
 
 - **Lint-driven gap filling.** Add a `lint_memory` task that asks the graph what concepts are thin or missing, hands the gaps to Tavily, and feeds results back through `ingest_source`.
 - **Schedule the pipeline.** Wire `memory_pipeline` to a Flyte cron so it ingests new sources nightly; the chat app picks up the latest run on next deploy.
-- **Expose the graph.** A Browse tab that renders Ladybug nodes/edges, or `SearchType.INSIGHTS` to show the entity relationships cognee extracted.
+- **Graph in the chat app too.** The ingest pipeline now renders the graph per-report; the chat app could grow a Browse/Graph tab that shows the same `visualize_graph` view of the live `/tmp` store, or use `SearchType.INSIGHTS` to surface relationships per query.
 - **Write-back from chat to a Dir.** The chat app remembers into `/tmp` + HF today; a task that promotes the HF snapshot into a canonical `flyte.io.Dir` would unify the two persistence paths.

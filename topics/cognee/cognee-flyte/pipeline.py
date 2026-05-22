@@ -124,14 +124,35 @@ async def ingest_source(
     await cognee.add(text, dataset_name=DATASET)
     await cognee.cognify(datasets=[DATASET])
 
+    # Pull the knowledge graph for the report. Best-effort: a viz failure must
+    # not fail the ingest. The interactive HTML is also written into the work
+    # dir so it travels inside the output flyte.io.Dir.
+    n_nodes = n_edges = 0
+    graph_table = "<p><i>Graph render unavailable.</i></p>"
+    graph_iframe = ""
+    try:
+        from cognee.infrastructure.databases.graph import get_graph_engine
+
+        graph_engine = await get_graph_engine()
+        nodes, edges = await graph_engine.get_graph_data()
+        n_nodes, n_edges = len(nodes), len(edges)
+        graph_table = cognee_lib.graph_summary_html(nodes, edges)
+
+        viz_html = await cognee.visualize_graph(str(Path(work) / "graph.html"))
+        graph_iframe = cognee_lib.embed_graph_iframe(viz_html)
+    except Exception as e:
+        log.warning(f"Graph render failed (continuing): {type(e).__name__}: {e}")
+
     stats = cognee_lib.storage_summary(work)
-    log.info(f"Memory now {stats['files']} files / {stats['mb']} MB")
+    log.info(f"Memory now {n_nodes} nodes / {n_edges} edges, {stats['mb']} MB")
     await flyte.report.replace.aio(
         f"<h2>Ingested: {title}</h2>"
         f"<p><b>Source:</b> {source_url or '(pasted text)'}</p>"
-        f"<p><b>Characters added:</b> {len(text):,}</p>"
-        f"<p><b>Store size:</b> {stats['files']} files, {stats['mb']} MB "
-        f"(SQLite + LanceDB + Ladybug)</p>"
+        f"<p><b>Characters added:</b> {len(text):,} · "
+        f"<b>Graph:</b> {n_nodes} nodes, {n_edges} relationships · "
+        f"<b>Store:</b> {stats['mb']} MB (SQLite + LanceDB + Ladybug)</p>"
+        f"<h3>Knowledge graph</h3>{graph_iframe}"
+        f"<h3>Relationships extracted</h3>{graph_table}"
     )
     await flyte.report.flush.aio()
     return await flyte.io.Dir.from_local(work)

@@ -343,6 +343,28 @@ def _run(vllm_url: str, model_id: str, hf_repo: str, hf_repo_type: str):
         except Exception as e:
             return f'<div class="mem-status">❌ Save failed: {_esc(type(e).__name__)}: {_esc(str(e))}</div>'
 
+    # ── Graph render (same view as the ingest pipeline's report) ──────────────
+
+    def render_graph():
+        import asyncio
+
+        async def _collect():
+            from cognee.infrastructure.databases.graph import get_graph_engine
+
+            graph_engine = await get_graph_engine()
+            nodes, edges = await graph_engine.get_graph_data()
+            viz = await cognee.visualize_graph(f"{WORK_DIR}/graph.html")
+            return nodes, edges, viz
+
+        try:
+            nodes, edges, viz = asyncio.run(_collect())
+        except Exception as e:
+            return f'<div class="mem-status">Graph render failed: {_esc(type(e).__name__)}: {_esc(str(e))}</div>'
+        header = f'<div class="mem-status">{len(nodes)} nodes · {len(edges)} relationships</div>'
+        iframe = cognee_lib.embed_graph_iframe(viz)
+        table = cognee_lib.graph_summary_html(nodes, edges)
+        return header + iframe + "<h3>Relationships</h3>" + table
+
     # ── UI ──────────────────────────────────────────────────────────────────
 
     with gr.Blocks(title=f"Cognee Memory ({model_id})", css=PANELS_CSS) as demo:
@@ -351,36 +373,48 @@ def _run(vllm_url: str, model_id: str, hf_repo: str, hf_repo_type: str):
             f"Model: `{model_id}` · Memory: cognee (SQLite + LanceDB + Ladybug) · "
             f"Backed by `{hf_repo}`"
         )
-        with gr.Row():
-            temperature = gr.Slider(0.0, 1.5, value=0.7, step=0.05, label="Temperature")
-            top_p = gr.Slider(0.1, 1.0, value=0.95, step=0.05, label="Top-p")
-        with gr.Row():
-            system_prompt = gr.Textbox(value=DEFAULT_SYSTEM, label="System prompt", lines=2, scale=4)
-            use_memory = gr.Checkbox(value=True, label="Use memory", scale=1)
-            enable_thinking = gr.Checkbox(value=True, label="Enable thinking", scale=1)
-        with gr.Row():
-            with gr.Column(scale=3):
-                chatbot = gr.Chatbot(type="messages", label="Conversation", height=520)
-                msg = gr.Textbox(label="Your message", placeholder="Ask about what's been ingested, or tell me something to remember…")
-                with gr.Row():
-                    send = gr.Button("Send", variant="primary")
-                    clear = gr.Button("Clear chat (memory stays)")
-                    save_btn = gr.Button("💾 Save to HF", variant="secondary")
-            with gr.Column(scale=2):
-                gr.Markdown("### Recalled this turn")
-                context_view = gr.HTML(value=_render_context([]))
-                gr.Markdown("### Status")
-                status_view = gr.HTML(value=_status_html())
+        with gr.Tab("💬 Chat"):
+            with gr.Row():
+                temperature = gr.Slider(0.0, 1.5, value=0.7, step=0.05, label="Temperature")
+                top_p = gr.Slider(0.1, 1.0, value=0.95, step=0.05, label="Top-p")
+            with gr.Row():
+                system_prompt = gr.Textbox(value=DEFAULT_SYSTEM, label="System prompt", lines=2, scale=4)
+                use_memory = gr.Checkbox(value=True, label="Use memory", scale=1)
+                enable_thinking = gr.Checkbox(value=True, label="Enable thinking", scale=1)
+            with gr.Row():
+                with gr.Column(scale=3):
+                    chatbot = gr.Chatbot(type="messages", label="Conversation", height=520)
+                    msg = gr.Textbox(label="Your message", placeholder="Ask about what's been ingested, or tell me something to remember…")
+                    with gr.Row():
+                        send = gr.Button("Send", variant="primary")
+                        clear = gr.Button("Clear chat (memory stays)")
+                        save_btn = gr.Button("💾 Save to HF", variant="secondary")
+                with gr.Column(scale=2):
+                    gr.Markdown("### Recalled this turn")
+                    context_view = gr.HTML(value=_render_context([]))
+                    gr.Markdown("### Status")
+                    status_view = gr.HTML(value=_status_html())
 
-        inputs = [msg, chatbot, system_prompt, use_memory, enable_thinking, temperature, top_p]
-        outputs = [msg, chatbot, context_view, status_view]
-        msg.submit(chat, inputs=inputs, outputs=outputs)
-        send.click(chat, inputs=inputs, outputs=outputs)
-        clear.click(
-            lambda: ([], _render_context([]), _status_html()),
-            outputs=[chatbot, context_view, status_view],
-        )
-        save_btn.click(save_now, outputs=status_view)
+            inputs = [msg, chatbot, system_prompt, use_memory, enable_thinking, temperature, top_p]
+            outputs = [msg, chatbot, context_view, status_view]
+            msg.submit(chat, inputs=inputs, outputs=outputs)
+            send.click(chat, inputs=inputs, outputs=outputs)
+            clear.click(
+                lambda: ([], _render_context([]), _status_html()),
+                outputs=[chatbot, context_view, status_view],
+            )
+            save_btn.click(save_now, outputs=status_view)
+
+        with gr.Tab("🕸 Graph"):
+            gr.Markdown(
+                "The cognee knowledge graph for the **live** memory store "
+                "(`/tmp/cognee-mem`), updated as you chat. Same view the ingest "
+                "pipeline renders in its Flyte report. The interactive graph needs "
+                "network (d3 from a CDN); the relationships table always renders."
+            )
+            graph_refresh = gr.Button("🔄 Render graph", variant="primary")
+            graph_view = gr.HTML(value='<div class="mem-status">Click “Render graph” to draw the current memory.</div>')
+            graph_refresh.click(render_graph, outputs=graph_view)
 
     demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
     # Keep the pod alive if launch() ever returns, so on_shutdown can fire.

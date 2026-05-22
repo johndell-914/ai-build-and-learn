@@ -221,6 +221,60 @@ def result_text(entry) -> str:
     return str(entry)
 
 
+def _esc(s) -> str:
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def embed_graph_iframe(viz_html: str, height: int = 620) -> str:
+    """Wrap cognee's standalone graph HTML in a base64 data: iframe.
+
+    cognee.visualize_graph() returns a full <!DOCTYPE html> document that loads
+    d3 from a CDN. We can't drop a whole document into the report HTML, so embed
+    it as an iframe via a base64 data URI (no quote-escaping headaches). No
+    sandbox attribute, so the d3 script runs. The report viewer's browser
+    fetches d3 from the CDN, so this needs network at view time.
+    """
+    import base64
+
+    b64 = base64.b64encode(viz_html.encode("utf-8")).decode("ascii")
+    return (
+        f'<iframe src="data:text/html;base64,{b64}" '
+        f'style="width:100%;height:{height}px;border:1px solid #ccc;border-radius:8px;" '
+        f'title="cognee knowledge graph"></iframe>'
+    )
+
+
+def graph_summary_html(nodes, edges, limit: int = 25) -> str:
+    """Static (no-JS) relationship table from cognee get_graph_data() output.
+
+    Always renders, so it's the fallback if the interactive iframe is stripped.
+    nodes: list of (node_id, node_info{name,type,...});
+    edges: list of (source, target, relation, edge_info).
+    """
+    name = {}
+    for nid, info in nodes or []:
+        name[str(nid)] = (info or {}).get("name") or str(nid)
+
+    rows = []
+    for e in (edges or [])[:limit]:
+        src, tgt, rel = str(e[0]), str(e[1]), e[2]
+        rows.append(
+            f"<tr><td>{_esc(name.get(src, src))}</td>"
+            f"<td><i>{_esc(rel)}</i></td>"
+            f"<td>{_esc(name.get(tgt, tgt))}</td></tr>"
+        )
+    more = "" if len(edges or []) <= limit else f"<p><i>… and {len(edges) - limit} more relationships</i></p>"
+    if not rows:
+        return "<p><i>No relationships extracted yet.</i></p>"
+    return (
+        "<table style='border-collapse:collapse;font-size:0.85rem;'>"
+        "<thead><tr><th style='text-align:left;padding:2px 10px'>Source</th>"
+        "<th style='text-align:left;padding:2px 10px'>Relationship</th>"
+        "<th style='text-align:left;padding:2px 10px'>Target</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>{more}"
+    )
+
+
 def storage_summary(work_dir: str) -> dict:
     """Cheap on-disk stats so reports show the memory growing without us having
     to crack open Ladybug. Counts files + total bytes under the storage root."""

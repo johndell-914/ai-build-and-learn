@@ -2,7 +2,7 @@
 # gcloud_commands.sh — run these from your LOCAL machine (not the VM)
 # Replace YOUR_PROJECT_ID with your actual GCP project ID.
 
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="project-4ef32d8e-2be2-4c1a-b23"
 ZONE="us-west1-b"
 VM_NAME="rag-comparison"
 IMAGE_NAME="johndellenbaugh/rag-comparison"

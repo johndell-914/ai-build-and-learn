@@ -21,3 +21,10 @@ neo4j>=5.0.0
 # Base install — no postgres extra needed (using local LanceDB storage)
 cognee>=0.1.0
 lancedb>=0.6.0
+
+# ── Ingest ────────────────────────────────────────────────────────────────────
+pymupdf>=1.24.0                  # PDF text extraction
+langchain-text-splitters>=0.2.0  # Recursive character chunking
+numpy>=1.26.0                    # Vector math for entity resolution + community similarity
+networkx>=3.0                    # Entity graph for Louvain community detection
+python-louvain>=0.16             # Louvain community detection algorithm (imports as `community`)

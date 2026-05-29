@@ -51,17 +51,25 @@ async def _comparison_summary(
         f"Retrieved:\n{c_ctx}\n\n"
         f"Answer:\n{c_ans}\n\n"
         f"{'─' * 60}\n\n"
-        f"Evaluate each system on:\n"
+        f"Structure your response exactly as follows:\n\n"
+        f"## Verdict\n"
+        f"A markdown table with exactly these columns: System | Performed Well | Weakness | Score (/5). "
+        f"One row per system (Vector RAG, Graph RAG, Cognee). "
+        f"Sort rows by score descending — winner on top. "
+        f"Prefix the winning system name with 🏆 and the runner-up with 🥈. "
+        f"After the table, one bold sentence naming the winner and the single biggest reason it won.\n\n"
+        f"## Recommended Strategy\n"
+        f"One sentence: which retrieval strategy you would recommend for questions like this one.\n\n"
+        f"## System Breakdown\n"
+        f"For each system evaluate:\n"
         f"1. Retrieval quality — how relevant and complete was the context it found?\n"
         f"2. Answer quality — how accurate, complete, and well-grounded is the response?\n"
-        f"3. What did it miss or get wrong?\n\n"
-        f"End with a clear verdict: which system performed best for this question, "
-        f"and which retrieval strategy would you recommend for questions like this one?"
+        f"3. What did it miss or get wrong?"
     )
 
     response = await get_client().messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=1024,
+        max_tokens=1500,
         system=_COMPARISON_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -103,8 +111,16 @@ async def run_comparison(question: str):
 
 # ── Gradio UI ─────────────────────────────────────────────────────────────────
 
+_CSS = """
+.answer-panel { min-height: 220px; }
+.answer-panel .prose { max-height: 280px; overflow-y: auto; padding-right: 4px; font-size: 14px; }
+.summary-panel { min-height: 160px; }
+.summary-panel .prose { max-height: 400px; overflow-y: auto; padding-right: 4px; font-size: 14px; }
+"""
+
 with gr.Blocks(
     title="RAG Comparison",
+    css=_CSS,
 ) as demo:
 
     gr.Markdown(
@@ -131,7 +147,7 @@ with gr.Blocks(
             )
             with gr.Accordion("Retrieved context", open=False):
                 vector_ctx = gr.Textbox(lines=8, interactive=False, show_label=False)
-            vector_ans = gr.Textbox(label="Answer", lines=7, interactive=False)
+            vector_ans = gr.Markdown(label="Answer", container=True, elem_classes="answer-panel")
 
         with gr.Column():
             gr.Markdown("### Graph RAG")
@@ -141,7 +157,7 @@ with gr.Blocks(
             )
             with gr.Accordion("Retrieved context", open=False):
                 graph_ctx = gr.Textbox(lines=8, interactive=False, show_label=False)
-            graph_ans = gr.Textbox(label="Answer", lines=7, interactive=False)
+            graph_ans = gr.Markdown(label="Answer", container=True, elem_classes="answer-panel")
 
         with gr.Column():
             gr.Markdown("### Cognee")
@@ -151,16 +167,12 @@ with gr.Blocks(
             )
             with gr.Accordion("Retrieved context", open=False):
                 cognee_ctx = gr.Textbox(lines=8, interactive=False, show_label=False)
-            cognee_ans = gr.Textbox(label="Answer", lines=7, interactive=False)
+            cognee_ans = gr.Markdown(label="Answer", container=True, elem_classes="answer-panel")
 
     gr.Markdown("---")
     gr.Markdown("### Comparison Summary")
     gr.Markdown("*Claude evaluates all three answers and names a winner.*")
-    summary_box = gr.Textbox(
-        label="Evaluation",
-        lines=10,
-        interactive=False,
-    )
+    summary_box = gr.Markdown(label="Evaluation", container=True, elem_classes="summary-panel")
 
     outputs = [vector_ctx, vector_ans, graph_ctx, graph_ans, cognee_ctx, cognee_ans, summary_box]
 

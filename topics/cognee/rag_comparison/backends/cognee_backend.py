@@ -52,27 +52,26 @@ def _extract_text(result) -> str:
     return str(payload)
 
 
-async def query(question: str) -> tuple[str, str]:
+async def retrieve(question: str) -> tuple[str, str]:
+    """Return (context_str, summary_str) without generating an answer."""
     _configure()
 
     import cognee
     from cognee.api.v1.search import SearchType
 
-    results = await cognee.search(
-        query_type=SearchType.CHUNKS,
-        query_text=question,
-    )
-
+    results = await cognee.search(query_type=SearchType.CHUNKS, query_text=question)
     if not results:
-        return (
-            "No chunks retrieved.",
-            "No relevant information found in Cognee's knowledge graph.",
-        )
+        return "", "No chunks retrieved."
 
     texts = [t for t in (_extract_text(r) for r in results[:TOP_K]) if t]
+    context = "\n\n---\n\n".join(texts)
+    summary = "\n".join(f"• Chunk {i + 1}: {t[:120]}..." for i, t in enumerate(texts))
+    return context, summary
 
-    retrieved = "\n".join(f"• Chunk {i + 1}: {t[:120]}..." for i, t in enumerate(texts))
-    context   = "\n\n---\n\n".join(texts)
 
+async def query(question: str) -> tuple[str, str]:
+    context, retrieved = await retrieve(question)
+    if not context:
+        return "No chunks retrieved.", "No relevant information found in Cognee's knowledge graph."
     answer = await generate_answer(question, context)
     return retrieved, answer

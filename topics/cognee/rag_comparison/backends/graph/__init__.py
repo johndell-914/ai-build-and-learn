@@ -58,6 +58,16 @@ def _summarize(context: dict, mode: str, reasoning: str) -> str:
     return "\n".join(lines)
 
 
+async def retrieve(question: str) -> tuple[str, str]:
+    """Return (context_str, summary_str) without generating an answer."""
+    from backends.graph.generation import _FORMATTERS, _format_hybrid
+    mode, reasoning = await route(question)
+    context_dict = await _RETRIEVERS.get(mode, hybrid_retrieve)(question)
+    context_str = _FORMATTERS.get(mode, _format_hybrid)(context_dict)
+    summary = _summarize(context_dict, mode, reasoning)
+    return context_str, summary
+
+
 async def query(question: str) -> tuple[str, str]:
     mode, reasoning = await route(question)
     retriever = _RETRIEVERS.get(mode, hybrid_retrieve)

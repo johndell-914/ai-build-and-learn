@@ -41,3 +41,10 @@ VECTOR_INDEX_NAME = "chunk-embeddings"
 COGNEE_DATA_PATH = os.environ.get(
     "COGNEE_DATA_PATH", str(ROOT_DIR / ".cognee_data")
 )
+
+# ── Google Vertex AI / Gemma 4 (Model Comparison tab) ────────────────────────
+# Auth via Application Default Credentials — no key file needed on GCP VM.
+
+GCP_PROJECT = os.environ.get("GCP_PROJECT", "")
+GCP_REGION  = os.environ.get("GCP_REGION", "global")
+GEMMA_MODEL = os.environ.get("GEMMA_MODEL", "publishers/google/models/gemma-4-26b-a4b-it-maas")

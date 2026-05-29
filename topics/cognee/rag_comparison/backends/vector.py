@@ -59,19 +59,22 @@ def _fetch_chunks(question: str) -> list[dict]:
             ]
 
 
-async def query(question: str) -> tuple[str, str]:
+async def retrieve(question: str) -> tuple[str, str]:
+    """Return (context_str, summary_str) without generating an answer."""
     chunks = await asyncio.to_thread(_fetch_chunks, question)
-
     if not chunks:
-        return "No chunks retrieved.", "No relevant information found in the vector store."
-
+        return "", "No chunks retrieved."
     context = "\n\n---\n\n".join(
         f"[{c['source_doc']} | score: {c['score']}]\n{c['chunk_text']}"
         for c in chunks
     )
-    retrieved = "\n".join(
-        f"• {c['source_doc']}  (score: {c['score']})" for c in chunks
-    )
+    summary = "\n".join(f"• {c['source_doc']}  (score: {c['score']})" for c in chunks)
+    return context, summary
 
+
+async def query(question: str) -> tuple[str, str]:
+    context, retrieved = await retrieve(question)
+    if not context:
+        return "No chunks retrieved.", "No relevant information found in the vector store."
     answer = await generate_answer(question, context)
     return retrieved, answer

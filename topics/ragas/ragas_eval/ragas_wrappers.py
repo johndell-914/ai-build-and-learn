@@ -10,7 +10,7 @@ from langchain_core.embeddings import Embeddings
 from config import ANTHROPIC_API_KEY, EVAL_LLM_MODEL
 
 _HF_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-_HF_URL   = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{_HF_MODEL}"
+_HF_URL   = f"https://router.huggingface.co/hf-inference/pipeline/feature-extraction/{_HF_MODEL}"
 
 
 class _HuggingFaceInferenceEmbeddings(Embeddings):

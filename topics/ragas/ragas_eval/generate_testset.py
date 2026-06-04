@@ -1,103 +1,125 @@
 """
 generate_testset.py — One-shot script: Everstorm PDFs → data/testset.json
 
-Run inside Docker after the image is built and pushed:
+Uses Claude directly to generate question/ground_truth pairs from PDF chunks,
+bypassing ragas TestsetGenerator (which requires native binaries unavailable
+on this VM's CPU).
+
+Run inside Docker:
     docker exec -w /app rag-comparison-ragas python ragas_eval/generate_testset.py
 
-Or locally (with ANTHROPIC_API_KEY in .env):
+Or locally:
     python topics/ragas/ragas_eval/generate_testset.py
 """
 
+import asyncio
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 
-# Make ragas_eval importable whether run from repo root or its own directory
 _here = Path(__file__).parent
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 
 from dotenv import load_dotenv
-
 load_dotenv()
 
-import compat  # noqa: F401 — must be before ragas; stubs broken deps
-import config  # noqa: F401 — triggers missing-env-var check before anything else
-from config import DATA_DIR
-from ragas_wrappers import get_ragas_embeddings, get_ragas_llm
+import config  # noqa: F401 — triggers env var check early
+from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, DATA_DIR
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 logger = logging.getLogger(__name__)
 
-# PDFs live at /app/data/ in Docker; fall back to rag_comparison/data/ for local dev
 _DOCKER_DATA = Path("/app/data")
 _LOCAL_DATA  = Path(__file__).parents[2] / "cognee" / "rag_comparison" / "data"
 _PDF_DIR     = _DOCKER_DATA if _DOCKER_DATA.exists() else _LOCAL_DATA
 
-TESTSET_SIZE  = 20
-TESTSET_PATH  = DATA_DIR / "testset.json"
+TESTSET_SIZE = 20
+TESTSET_PATH = DATA_DIR / "testset.json"
+
+_PROMPT = """\
+You are creating evaluation data for a RAG system about Everstorm Outfitters, \
+an outdoor gear company.
+
+Read the document excerpt below and generate ONE question that can be answered \
+using only this excerpt, plus the ground-truth answer.
+
+Rules:
+- Question must be specific and answerable from the excerpt alone
+- Ground truth must be a complete, accurate answer (1-3 sentences)
+- Do not ask about page numbers, formatting, or document structure
+
+Excerpt:
+{chunk}
+
+Respond with JSON only — no explanation, no markdown fences:
+{{"question": "...", "ground_truth": "..."}}"""
 
 
-def _load_documents():
+def _load_chunks() -> list[str]:
     from langchain_community.document_loaders import PyMuPDFLoader
 
     pdfs = sorted(_PDF_DIR.glob("*.pdf"))
     if not pdfs:
         raise FileNotFoundError(f"No PDFs found in {_PDF_DIR}")
-    logger.info("Loading %d PDFs from %s", len(pdfs), _PDF_DIR)
+    logger.info("Loading PDFs from %s", _PDF_DIR)
 
-    docs = []
+    pages = []
     for pdf in pdfs:
-        loader = PyMuPDFLoader(str(pdf))
-        docs.extend(loader.load())
+        pages.extend(PyMuPDFLoader(str(pdf)).load())
 
-    logger.info("Loaded %d document pages total", len(docs))
-    return docs
+    # Keep pages with enough content; sample evenly across all PDFs
+    chunks = [p.page_content.strip() for p in pages if len(p.page_content.strip()) > 200]
+    logger.info("%d usable pages from %d PDFs", len(chunks), len(pdfs))
+    return chunks
 
 
-def _generate(docs, llm, emb):
-    from ragas.testset import TestsetGenerator
+async def _generate_pair(client, chunk: str, idx: int) -> dict | None:
+    from anthropic import AsyncAnthropic
+    try:
+        resp = await client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=512,
+            messages=[{"role": "user", "content": _PROMPT.format(chunk=chunk[:2000])}],
+        )
+        text = resp.content[0].text.strip()
+        pair = json.loads(text)
+        if pair.get("question") and pair.get("ground_truth"):
+            return {"question": pair["question"].strip(), "ground_truth": pair["ground_truth"].strip()}
+    except Exception as e:
+        logger.warning("Skipping chunk %d: %s", idx, e)
+    return None
 
-    generator = TestsetGenerator.from_langchain(
-        llm=llm,
-        embedding_model=emb,
-    )
-    return generator.generate_with_langchain_docs(
-        documents=docs,
-        testset_size=TESTSET_SIZE,
-    )
+
+async def _generate_all(chunks: list[str]) -> list[dict]:
+    from anthropic import AsyncAnthropic
+
+    client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+
+    # Sample evenly across available chunks to hit TESTSET_SIZE
+    step = max(1, len(chunks) // TESTSET_SIZE)
+    selected = chunks[::step][:TESTSET_SIZE * 2]  # extra in case some fail
+
+    logger.info("Generating Q&A pairs from %d chunks...", len(selected))
+    tasks = [_generate_pair(client, chunk, i) for i, chunk in enumerate(selected)]
+    results = await asyncio.gather(*tasks)
+
+    pairs = [r for r in results if r is not None]
+    logger.info("Got %d valid pairs", len(pairs))
+    return pairs[:TESTSET_SIZE]
 
 
 def main():
-    docs = _load_documents()
-    llm  = get_ragas_llm()
-    emb  = get_ragas_embeddings()
+    chunks = _load_chunks()
+    pairs  = asyncio.run(_generate_all(chunks))
 
-    logger.info("Generating testset (size=%d) — this may take several minutes...", TESTSET_SIZE)
-    testset = _generate(docs, llm, emb)
+    if not pairs:
+        raise ValueError("No Q&A pairs generated — check API key and PDF content.")
 
-    df = testset.to_pandas()
-    logger.info("Generated %d rows. Columns: %s", len(df), list(df.columns))
-
-    # Column names vary slightly across ragas sub-releases
-    records = []
-    for _, row in df.iterrows():
-        q  = row.get("question") or row.get("user_input", "")
-        gt = row.get("ground_truth") or row.get("reference", "")
-        if q and gt:
-            records.append({"question": str(q).strip(), "ground_truth": str(gt).strip()})
-
-    if not records:
-        raise ValueError(
-            "No valid question/ground_truth pairs in generated testset. "
-            f"Available columns: {list(df.columns)}"
-        )
-
-    logger.info("Saving %d Q&A pairs to %s", len(records), TESTSET_PATH)
+    logger.info("Saving %d pairs to %s", len(pairs), TESTSET_PATH)
     tmp = TESTSET_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(records, indent=2))
+    tmp.write_text(json.dumps(pairs, indent=2))
     tmp.replace(TESTSET_PATH)
     logger.info("Done.")
 

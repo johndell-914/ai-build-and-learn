@@ -66,8 +66,7 @@ def _generate(docs, llm, emb):
     )
     return generator.generate_with_langchain_docs(
         documents=docs,
-        test_size=TESTSET_SIZE,
-        raise_exceptions=True,
+        testset_size=TESTSET_SIZE,
     )
 
 

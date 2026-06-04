@@ -1,5 +1,5 @@
 from langchain_anthropic import ChatAnthropic
-from langchain_community.embeddings import FastEmbedEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 from config import ANTHROPIC_API_KEY, EMBEDDING_MODEL, EVAL_LLM_MODEL
 
@@ -12,11 +12,11 @@ def get_ragas_llm() -> ChatAnthropic:
     )
 
 
-def get_ragas_embeddings() -> FastEmbedEmbeddings:
+def get_ragas_embeddings() -> HuggingFaceEmbeddings:
     try:
-        return FastEmbedEmbeddings(model_name=EMBEDDING_MODEL)
+        return HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
     except Exception as e:
         raise RuntimeError(
-            f"fastembed model download failed — check network and disk space. "
+            f"HuggingFace embeddings model load failed — check network and disk space. "
             f"Original error: {e}"
         ) from e

@@ -78,6 +78,7 @@ def build_demo() -> gr.Blocks:
             fn=handle_single_eval,
             inputs=[q_input, gt_input],
             outputs=[single_btn] + single_outputs,
+            show_progress="full",
         )
 
     return demo

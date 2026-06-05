@@ -29,7 +29,7 @@ def _post_hf(texts: List[str], retries: int = 3) -> List[List[float]]:
     for attempt in range(retries):
         req = urllib.request.Request(_HF_URL, data=body, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=120) as resp:
                 result = json.loads(resp.read())
                 if result and isinstance(result[0], float):
                     return [result]
@@ -73,6 +73,7 @@ def get_ragas_llm():
         model=EVAL_LLM_MODEL,
         provider="anthropic",
         client=AsyncAnthropic(api_key=ANTHROPIC_API_KEY),
+        max_tokens=4096,  # faithfulness NLI reasoning needs more than the default 1024
     )
     # Anthropic rejects requests with both temperature and top_p.
     # InstructorLLM includes top_p in model_args by default — remove it.
